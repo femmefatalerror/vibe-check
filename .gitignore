@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+*.log
+results.sarif
+report.json
+report.md
+.claude/settings.local.json

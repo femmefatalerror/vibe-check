@@ -1,0 +1,10 @@
+{
+  "suppress": [
+    "skill/content/no-code-examples",
+    "agent/boundaries/no-stopping-condition"
+  ],
+  "severity": {
+    "skill/content/filler-phrase": "warn",
+    "agent/instructions/time-sensitive": "error"
+  }
+}
