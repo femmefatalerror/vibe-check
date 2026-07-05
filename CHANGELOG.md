@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Suspicious HTML comments with defensive wording are reported at info severity instead of skipped
 
 ### Changed
+- Published as `@femmefatalerror/vibe-check` (npm blocks the unscoped name as too similar to the existing `vibecheck` package); the CLI command is still `vibe-check`
 - CLI `--version` and the GitHub User-Agent now read from package.json (single source of truth)
 
 ## [0.3.0] - 2026-07-04

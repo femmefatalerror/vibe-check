@@ -1,5 +1,5 @@
 {
-  "name": "vibe-check",
+  "name": "@femmefatalerror/vibe-check",
   "version": "0.4.0",
   "description": "You vibe-coded your agents. Time for a vibe check. Linter and security scanner for Claude skills, agents, and AI workspaces.",
   "main": "./dist/index.js",
@@ -29,6 +29,9 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT",
   "author": "femmefatalerror",

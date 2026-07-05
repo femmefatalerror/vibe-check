@@ -19,6 +19,12 @@ Inspired by [skillscore](https://github.com/joeynyc/skillscore) and [agentlinter
 ## Installation
 
 ```bash
+npm install -g @femmefatalerror/vibe-check
+```
+
+Or from source:
+
+```bash
 git clone https://github.com/femmefatalerror/vibe-check.git
 cd vibe-check
 npm install
@@ -26,7 +32,7 @@ npm run build
 npm install -g .
 ```
 
-Requires Node ≥ 18.
+Either way, the command is `vibe-check`. Requires Node ≥ 18.
 
 ## Usage
 
