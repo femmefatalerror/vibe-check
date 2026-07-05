@@ -1,6 +1,6 @@
 {
   "name": "@femmefatalerror/vibe-check",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "You vibe-coded your agents. Time for a vibe check. Linter and security scanner for Claude skills, agents, and AI workspaces.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
