@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-05
+
 ### Fixed
 - Long pure-hex strings (sha256/sha512 checksums, git object IDs) are no longer flagged as suspicious base64 blobs
 - Removed a dead `e.g.` alternative from the defensive-context regex (it could never match)
@@ -42,6 +44,7 @@ Initial release: linter and security scanner for Claude skills, agents, and AI
 workspaces — skill/agent lint rules, workspace diagnosis, injection scanning,
 GitHub URL analysis, SARIF output, and configurable rule suppression.
 
-[Unreleased]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/femmefatalerror/vibe-check/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/femmefatalerror/vibe-check/releases/tag/v0.3.0
