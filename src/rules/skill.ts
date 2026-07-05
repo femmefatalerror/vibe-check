@@ -138,6 +138,11 @@ function routingRules(parsed: ParsedFile): Finding[] {
   const findings: Finding[] = [];
   if (!parsed.frontmatter) return findings;
 
+  // User-invoked only: Claude never routes to this skill by its description,
+  // so trigger and discovery checks don't apply
+  const dmi = parsed.frontmatter['disable-model-invocation'];
+  if (dmi === true || String(dmi).toLowerCase() === 'true') return findings;
+
   const desc = String(parsed.frontmatter['description'] ?? '').trim();
   if (!desc) return findings; // already flagged
 

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Routing & Discovery checks (trigger condition, voice, description vagueness) are skipped for skills with `disable-model-invocation: true`, since Claude never routes to them by description
+
 ## [0.4.3] - 2026-07-05
 
 ### Added

@@ -70,6 +70,26 @@ function assert(condition: boolean, label: string): void {
   );
 }
 
+// ── Skill: disable-model-invocation skips routing checks ─────────────────────
+{
+  const parsed = parseContent('SKILL.md', '---\nname: pdf-processor\ndescription: Processes PDF files and extracts text from documents.\ndisable-model-invocation: true\n---\n\n# Body\n\nSome content here.');
+  const cats = lintSkill(parsed, new Set());
+  const routing = cats.find(c => c.id === 'routing')!;
+  assert(
+    routing.findings.length === 0,
+    'disable-model-invocation: true skips routing checks (skill is never model-routed)'
+  );
+}
+{
+  const parsed = parseContent('SKILL.md', '---\nname: pdf-processor\ndescription: Processes PDF files and extracts text from documents.\ndisable-model-invocation: false\n---\n\n# Body\n\nSome content here.');
+  const cats = lintSkill(parsed, new Set());
+  const routing = cats.find(c => c.id === 'routing')!;
+  assert(
+    routing.findings.some(f => f.ruleId === 'skill/routing/no-trigger'),
+    'disable-model-invocation: false still runs routing checks'
+  );
+}
+
 // ── Skill: first-person description ──────────────────────────────────────────
 {
   const parsed = parseContent('SKILL.md', '---\nname: pdf-processor\ndescription: I can process PDF files. Use when working with PDFs.\n---\n\n# Body');
