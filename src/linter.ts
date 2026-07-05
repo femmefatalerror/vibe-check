@@ -127,7 +127,13 @@ function attachCompanionFindings(result: LintResult, skillDir: string, config: C
 }
 
 export function lintFile(filePath: string, config: Config = {}, forcedType?: FileType): LintResult {
-  const parsed = parseFile(filePath);
+  return lintParsed(parseFile(filePath), config, forcedType);
+}
+
+// Lint an already-parsed file — lets callers that need the ParsedFile for other
+// checks (e.g. diagnoseWorkspace) avoid reading and parsing twice.
+export function lintParsed(parsed: ParsedFile, config: Config = {}, forcedType?: FileType): LintResult {
+  const filePath = parsed.path;
   const suppress = new Set(config.suppress ?? []);
   const overrides = config.severity ?? {};
 
@@ -187,12 +193,12 @@ export function diagnoseWorkspace(root: string, config: Config = {}): WorkspaceD
     throw new Error(`No skills or agent files (SKILL.md, CLAUDE.md, AGENT.md, AGENTS.md) found in ${root}`);
   }
 
-  const results = discovered.map(d => {
-    const result = lintFile(d.path, config, d.type);
+  const parsedFiles = discovered.map(d => parseFile(d.path));
+  const results = discovered.map((d, i) => {
+    const result = lintParsed(parsedFiles[i], config, d.type);
     if (d.type === 'skill') attachCompanionFindings(result, path.dirname(d.path), config);
     return result;
   });
-  const parsedFiles = discovered.map(d => parseFile(d.path));
 
   const totalTokens = results.reduce((s, r) => s + r.tokens.total, 0);
   const agentTokens = results

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Long pure-hex strings (sha256/sha512 checksums, git object IDs) are no longer flagged as suspicious base64 blobs
+- Removed a dead `e.g.` alternative from the defensive-context regex (it could never match)
+
+### Changed
+- Workspace diagnosis parses each file once instead of twice (internal refactor, same results)
+- CLI output-format dispatch consolidated into shared helpers (no behavior change)
+
 ## [0.4.0] - 2026-07-05
 
 ### Added

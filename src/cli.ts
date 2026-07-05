@@ -11,7 +11,7 @@ import {
 } from './reporter';
 import { isGithubUrl, fetchGithubSkill, fetchGithubAgent } from './github';
 import { VERSION } from './version';
-import type { Config, LintResult, FileType } from './types';
+import type { Config, LintResult, FileType, WorkspaceDiagnosis } from './types';
 
 function format(opts: { json?: boolean; markdown?: boolean; sarif?: boolean }): 'json' | 'markdown' | 'sarif' | 'terminal' {
   if (opts.sarif) return 'sarif';
@@ -56,17 +56,42 @@ function write(content: string, file?: string): void {
 function emitResults(
   results: LintResult[],
   fmt: 'json' | 'markdown' | 'sarif' | 'terminal',
-  opts: { output?: string }
+  opts: { output?: string },
+  extra: { arrayJson?: boolean; batchSummary?: boolean } = {}
 ): void {
   if (fmt === 'json') {
-    write(results.length === 1 ? reportJson(results[0]) : JSON.stringify(results, null, 2), opts.output);
+    const single = results.length === 1 && !extra.arrayJson;
+    write(single ? reportJson(results[0]) : JSON.stringify(results, null, 2), opts.output);
   } else if (fmt === 'markdown') {
     write(results.map(reportMarkdown).join('\n\n---\n\n'), opts.output);
   } else if (fmt === 'sarif') {
     write(reportSarif(results), opts.output);
   } else {
     results.forEach(reportTerminal);
+    if (extra.batchSummary) reportBatchSummary(results);
   }
+}
+
+function emitWorkspace(
+  diagnosis: WorkspaceDiagnosis,
+  fmt: 'json' | 'markdown' | 'sarif' | 'terminal',
+  opts: { output?: string; verbose?: boolean }
+): void {
+  if (fmt === 'json') {
+    write(reportWorkspaceJson(diagnosis), opts.output);
+  } else if (fmt === 'markdown') {
+    write(reportWorkspaceMarkdown(diagnosis), opts.output);
+  } else if (fmt === 'sarif') {
+    write(reportSarif(diagnosis.files), opts.output);
+  } else {
+    reportWorkspaceTerminal(diagnosis);
+    if (opts.verbose) diagnosis.files.forEach(reportTerminal);
+  }
+}
+
+function workspaceExitCode(diagnosis: WorkspaceDiagnosis, minScore?: number): number {
+  const belowThreshold = minScore !== undefined && diagnosis.workspaceScore < minScore;
+  return diagnosis.criticalSecurityIssues > 0 || diagnosis.totalErrors > 0 || belowThreshold ? 1 : 0;
 }
 
 function hasErrors(results: LintResult[]): boolean {
@@ -194,18 +219,8 @@ program
       if (stat.isDirectory() && !fs.existsSync(path.join(target, 'SKILL.md'))) {
         // No SKILL.md at the top level — treat as a workspace
         const diagnosis = diagnoseWorkspace(path.resolve(target), cfg);
-        if (fmt === 'json') {
-          write(reportWorkspaceJson(diagnosis), opts.output);
-        } else if (fmt === 'markdown') {
-          write(reportWorkspaceMarkdown(diagnosis), opts.output);
-        } else if (fmt === 'sarif') {
-          write(reportSarif(diagnosis.files), opts.output);
-        } else {
-          reportWorkspaceTerminal(diagnosis);
-          if (opts.verbose) diagnosis.files.forEach(reportTerminal);
-        }
-        const belowThreshold = minScore !== undefined && diagnosis.workspaceScore < minScore;
-        process.exitCode = diagnosis.criticalSecurityIssues > 0 || diagnosis.totalErrors > 0 || belowThreshold ? 1 : 0;
+        emitWorkspace(diagnosis, fmt, opts);
+        process.exitCode = workspaceExitCode(diagnosis, minScore);
         return;
       }
 
@@ -272,15 +287,7 @@ program
         }
       }
 
-      if (fmt === 'json') {
-        write(results.length === 1 ? reportJson(results[0]) : JSON.stringify(results, null, 2), opts.output);
-      } else if (fmt === 'markdown') {
-        write(results.map(reportMarkdown).join('\n\n---\n\n'), opts.output);
-      } else if (fmt === 'sarif') {
-        write(reportSarif(results), opts.output);
-      } else {
-        results.forEach(reportTerminal);
-      }
+      emitResults(results, fmt, opts);
 
       process.exitCode = hasErrors(results) || failsMinScore(results, minScore) ? 1 : 0;
     } catch (e) {
@@ -324,15 +331,7 @@ program
       const result = lintFile(localTarget, cfg, 'agent');
       if (tmpDir) result.file = target; // show GitHub URL, not temp path
 
-      if (fmt === 'json') {
-        write(reportJson(result), opts.output);
-      } else if (fmt === 'markdown') {
-        write(reportMarkdown(result), opts.output);
-      } else if (fmt === 'sarif') {
-        write(reportSarif([result]), opts.output);
-      } else {
-        reportTerminal(result);
-      }
+      emitResults([result], fmt, opts);
 
       process.exitCode = hasErrors([result]) || failsMinScore([result], minScore) ? 1 : 0;
     } catch (e) {
@@ -365,20 +364,8 @@ program
     try {
       const minScore = parseMinScore(opts.minScore);
       const diagnosis = diagnoseWorkspace(root, cfg);
-
-      if (fmt === 'json') {
-        write(reportWorkspaceJson(diagnosis), opts.output);
-      } else if (fmt === 'markdown') {
-        write(reportWorkspaceMarkdown(diagnosis), opts.output);
-      } else if (fmt === 'sarif') {
-        write(reportSarif(diagnosis.files), opts.output);
-      } else {
-        reportWorkspaceTerminal(diagnosis);
-        if (opts.verbose) diagnosis.files.forEach(reportTerminal);
-      }
-
-      const belowThreshold = minScore !== undefined && diagnosis.workspaceScore < minScore;
-      process.exit(diagnosis.criticalSecurityIssues > 0 || diagnosis.totalErrors > 0 || belowThreshold ? 1 : 0);
+      emitWorkspace(diagnosis, fmt, opts);
+      process.exit(workspaceExitCode(diagnosis, minScore));
     } catch (e) {
       process.stderr.write(`Error: ${errMsg(e)}\n`);
       process.exit(2);
@@ -411,16 +398,7 @@ program
 
       const results = files.map(f => lintFile(f, cfg, opts.type as FileType | undefined));
 
-      if (fmt === 'json') {
-        write(JSON.stringify(results, null, 2), opts.output);
-      } else if (fmt === 'markdown') {
-        write(results.map(reportMarkdown).join('\n\n---\n\n'), opts.output);
-      } else if (fmt === 'sarif') {
-        write(reportSarif(results), opts.output);
-      } else {
-        results.forEach(reportTerminal);
-        reportBatchSummary(results);
-      }
+      emitResults(results, fmt, opts, { arrayJson: true, batchSummary: true });
 
       process.exit(hasErrors(results) || failsMinScore(results, minScore) ? 1 : 0);
     } catch (e) {

@@ -67,8 +67,8 @@ const OVERRIDE_ATTEMPT_RE = /(ignore|disregard|forget|override)\s+(?:all\s+|any\
 
 // Lines that discuss injection defensively. This text is attacker-controlled,
 // so a match downgrades severity rather than suppressing the finding — appending
-// "e.g." or "never" to a payload must not make it invisible.
-const DEFENSE_CONTEXT_RE = /\b(never|do not|don'?t|refuse|reject|treat|flag|detect|defen[cs]e|guard|malicious|injection|attack|attempts?|such as|e\.g\.)\b/i;
+// "never" or "such as" to a payload must not make it invisible.
+const DEFENSE_CONTEXT_RE = /\b(never|do not|don'?t|refuse|reject|treat|flag|detect|defen[cs]e|guard|malicious|injection|attack|attempts?|such as)\b/i;
 
 const CONCEALMENT_RE = /\b(?:do\s*not|don'?t|never|without)\s+(?:tell(?:ing)?|inform(?:ing)?|notify(?:ing)?|alert(?:ing)?|show(?:ing)?)\s+the\s+user\b/i;
 
@@ -136,7 +136,9 @@ function scanInjection(parsed: ParsedFile, type: 'skill' | 'agent'): Finding[] {
       });
     }
 
-    if (!inCodeBlock && BASE64_BLOB_RE.test(line) && !/data:image\//.test(line)) {
+    // Pure-hex runs are digests (sha256/sha512 sums, git OIDs), not base64 payloads
+    const blob = inCodeBlock ? null : line.match(BASE64_BLOB_RE);
+    if (blob && !/^[0-9a-fA-F]+$/.test(blob[0]) && !/data:image\//.test(line)) {
       findings.push({
         ruleId: 'security/injection/base64-blob',
         severity: 'warn',
