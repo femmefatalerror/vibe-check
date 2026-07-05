@@ -7,9 +7,16 @@ export interface DiscoveredFile {
   type: 'skill' | 'agent';
 }
 
+// Repo-metadata files that are never skills, even inside a skills/ directory
+const DOC_FILENAMES = new Set([
+  'README.MD', 'CHANGELOG.MD', 'CONTRIBUTING.MD', 'LICENSE.MD',
+  'CODE_OF_CONDUCT.MD', 'SECURITY.MD',
+]);
+
 export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
   const discovered: DiscoveredFile[] = [];
   const seen = new Set<string>();
+  const absRoot = path.resolve(root);
 
   function add(filePath: string, type: 'skill' | 'agent') {
     const abs = path.resolve(filePath);
@@ -28,6 +35,14 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
       return;
     }
 
+    // Directory names are matched relative to the workspace root, so a repo
+    // checked out at e.g. ~/dev/skills doesn't turn every .md into a skill
+    const rel = path.relative(absRoot, dir);
+    const segments = rel === '' ? [] : rel.split(path.sep);
+    const inSkillsDir = segments.includes('skills');
+    const inRulesDir = segments.includes('rules') || segments.includes('instructions');
+    const hasSiblingSkill = entries.some(e => e.isFile() && e.name.toUpperCase() === 'SKILL.MD');
+
     for (const e of entries) {
       if (e.name === 'node_modules' || e.name === '.git' || e.name === 'dist') continue;
       // allow .claude directory even though it starts with '.'
@@ -39,21 +54,23 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
         walk(fullPath);
       } else if (e.name.endsWith('.md')) {
         const upper = e.name.toUpperCase();
-        const inSkillsDir = fullPath.includes(`${path.sep}skills${path.sep}`);
-        const inRulesDir =
-          fullPath.includes(`${path.sep}rules${path.sep}`) ||
-          fullPath.includes(`${path.sep}instructions${path.sep}`);
 
-        if (upper === 'SKILL.MD' || inSkillsDir) {
+        if (upper === 'SKILL.MD') {
           add(fullPath, 'skill');
-        } else if (upper === 'CLAUDE.MD' || upper === 'AGENT.MD' || upper === 'AGENTS.MD' || inRulesDir) {
+        } else if (upper === 'CLAUDE.MD' || upper === 'AGENT.MD' || upper === 'AGENTS.MD') {
+          add(fullPath, 'agent');
+        } else if (inSkillsDir) {
+          // Loose .md in a skills tree is a flat-layout skill — but not repo
+          // docs, and not companion references living next to a SKILL.md
+          if (!DOC_FILENAMES.has(upper) && !hasSiblingSkill) add(fullPath, 'skill');
+        } else if (inRulesDir) {
           add(fullPath, 'agent');
         }
       }
     }
   }
 
-  walk(root);
+  walk(absRoot);
 
   // Always include CLAUDE.md at root even if walk missed it
   for (const candidate of [path.join(root, 'CLAUDE.md'), path.join(root, '.claude', 'CLAUDE.md')]) {

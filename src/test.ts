@@ -326,6 +326,49 @@ function assert(condition: boolean, label: string): void {
   }
 }
 
+// ── Discovery matches directory names relative to the root, not the full path ─
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));
+  const root = path.join(tmp, 'skills'); // workspace checked out as ".../skills"
+  try {
+    fs.mkdirSync(path.join(root, 'skills', 'my-skill'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'README.md'), '# Readme\n');
+    fs.writeFileSync(path.join(root, 'CHANGELOG.md'), '# Changelog\n');
+    fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# Agent\n\nYou are a test agent.\n');
+    fs.writeFileSync(path.join(root, 'skills', 'my-skill', 'SKILL.md'), '---\nname: my-skill\ndescription: Test. Use when testing.\n---\n\n# Body\n');
+    const discovered = discoverWorkspaceFiles(root);
+    const names = discovered.map(d => path.relative(root, d.path));
+    assert(
+      !names.includes('README.md') && !names.includes('CHANGELOG.md'),
+      'root docs are not discovered when the workspace dir itself is named skills'
+    );
+    assert(
+      discovered.find(d => d.path.endsWith('CLAUDE.md'))?.type === 'agent',
+      'CLAUDE.md is an agent even when the workspace dir is named skills'
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// ── Docs and companion files inside a skills tree are not skills ───────────────
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));
+  try {
+    fs.mkdirSync(path.join(tmp, 'skills', 'my-skill'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'skills', 'README.md'), '# Category readme\n');
+    fs.writeFileSync(path.join(tmp, 'skills', 'my-skill', 'SKILL.md'), '---\nname: my-skill\ndescription: Test. Use when testing.\n---\n\n# Body\n');
+    fs.writeFileSync(path.join(tmp, 'skills', 'my-skill', 'REFERENCE.md'), '# Companion reference\n');
+    fs.writeFileSync(path.join(tmp, 'skills', 'flat-skill.md'), '---\nname: flat-skill\ndescription: Test. Use when testing.\n---\n\n# Body\n');
+    const names = discoverWorkspaceFiles(tmp).map(d => path.relative(tmp, d.path));
+    assert(!names.includes(path.join('skills', 'README.md')), 'README.md inside skills/ is not discovered');
+    assert(!names.includes(path.join('skills', 'my-skill', 'REFERENCE.md')), 'companion .md next to SKILL.md is not discovered');
+    assert(names.includes(path.join('skills', 'flat-skill.md')), 'flat .md in skills/ without sibling SKILL.md is a skill');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // ── lintParsed matches lintFile on the same content ───────────────────────────
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));

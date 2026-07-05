@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Workspace discovery matches `skills/`, `rules/`, and `instructions/` directories relative to the workspace root, so a repo checked out at e.g. `~/dev/skills` no longer treats every markdown file as a skill
+- Repo docs (`README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, ...) and companion references next to a `SKILL.md` inside a skills tree are no longer linted as skills
+
 ## [0.4.2] - 2026-07-05
 
 ### Changed
