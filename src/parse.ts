@@ -14,17 +14,18 @@ export function parseContent(filePath: string, raw: string): ParsedFile {
   let frontmatterError: string | null = null;
   let bodyLineOffset = 0;
 
-  if (raw.startsWith('---')) {
-    const endIdx = raw.indexOf('\n---', 3);
-    if (endIdx !== -1) {
-      const fmText = raw.slice(3, endIdx).trim();
+  // Frontmatter delimiters must be `---` alone on a line; matching on substrings
+  // miscounts when the frontmatter contains blank lines or `---`-prefixed content
+  if (/^---\s*$/.test(allLines[0] ?? '')) {
+    const closeIdx = allLines.findIndex((l, i) => i > 0 && /^---\s*$/.test(l));
+    if (closeIdx !== -1) {
+      const fmText = allLines.slice(1, closeIdx).join('\n');
       try {
-        frontmatter = yaml.load(fmText) as Record<string, unknown>;
+        frontmatter = (yaml.load(fmText) ?? null) as Record<string, unknown> | null;
       } catch (e) {
         frontmatterError = String(e);
       }
-      // count lines consumed by frontmatter (opening ---, content lines, closing ---)
-      bodyLineOffset = fmText.split('\n').length + 2;
+      bodyLineOffset = closeIdx + 1;
     }
   }
 

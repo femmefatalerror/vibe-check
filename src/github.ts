@@ -41,10 +41,10 @@ export function parseGithubUrl(url: string): GithubRef {
     };
   }
 
-  // https://github.com/owner/repo  (bare repo — try repo root)
+  // https://github.com/owner/repo  (bare repo — empty ref lets the API use the default branch)
   m = url.match(/github\.com\/([^/]+)\/([^/?#]+)\/?$/);
   if (m) {
-    return { owner: m[1], repo: m[2], ref: 'main', dirPath: '' };
+    return { owner: m[1], repo: m[2], ref: '', dirPath: '' };
   }
 
   throw new Error(
@@ -79,7 +79,8 @@ async function apiFetch(url: string): Promise<string> {
 
 async function listContents(ref: GithubRef): Promise<GithubContentEntry[]> {
   const apiPath = ref.dirPath ? `/${ref.dirPath}` : '';
-  const url = `https://api.github.com/repos/${ref.owner}/${ref.repo}/contents${apiPath}?ref=${ref.ref}`;
+  const refQuery = ref.ref ? `?ref=${ref.ref}` : '';
+  const url = `https://api.github.com/repos/${ref.owner}/${ref.repo}/contents${apiPath}${refQuery}`;
   const json = await apiFetch(url);
   const data = JSON.parse(json);
   if (!Array.isArray(data)) {
@@ -136,14 +137,33 @@ async function fetchGithubContents(
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-linter-'));
   try {
+    const download = async (dirEntries: GithubContentEntry[], destDir: string) => {
+      await Promise.all(
+        dirEntries
+          .filter(e => e.type === 'file' && e.download_url && FETCH_EXTENSIONS.has(path.extname(e.name).toLowerCase()))
+          .map(async e => {
+            const content = await apiFetch(e.download_url!);
+            fs.writeFileSync(path.join(destDir, e.name), content, 'utf-8');
+          })
+      );
+    };
+
+    await download(entries, tmpDir);
+
+    // one level of subdirectories — matches the local companion-script scan depth
+    const subdirs = entries.filter(e => e.type === 'dir' && !e.name.startsWith('.') && e.name !== 'node_modules');
     await Promise.all(
-      entries
-        .filter(e => e.type === 'file' && e.download_url && FETCH_EXTENSIONS.has(path.extname(e.name).toLowerCase()))
-        .map(async e => {
-          const content = await apiFetch(e.download_url!);
-          fs.writeFileSync(path.join(tmpDir, e.name), content, 'utf-8');
-        })
+      subdirs.map(async d => {
+        const subEntries = await listContents({
+          ...ref,
+          dirPath: ref.dirPath ? `${ref.dirPath}/${d.name}` : d.name,
+        });
+        const dest = path.join(tmpDir, d.name);
+        fs.mkdirSync(dest);
+        await download(subEntries, dest);
+      })
     );
+
     return { tmpDir, primaryPath: path.join(tmpDir, primary.name) };
   } catch (e) {
     fs.rmSync(tmpDir, { recursive: true, force: true });

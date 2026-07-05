@@ -21,10 +21,20 @@ function format(opts: { json?: boolean; markdown?: boolean; sarif?: boolean }): 
   return 'terminal';
 }
 
-function failsMinScore(results: LintResult[], minScore?: string): boolean {
-  if (minScore === undefined) return false;
-  const threshold = parseFloat(minScore);
+function failsMinScore(results: LintResult[], threshold?: number): boolean {
+  if (threshold === undefined) return false;
   return results.some(r => r.score < threshold);
+}
+
+function parseMinScore(value?: string): number | undefined {
+  if (value === undefined) return undefined;
+  const n = parseFloat(value);
+  if (Number.isNaN(n)) throw new Error(`Invalid --min-score value: "${value}" (expected a number)`);
+  return n;
+}
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 function config(opts: { config?: string; suppress?: string }): Config {
@@ -69,7 +79,10 @@ function resolveGlob(pattern: string): string[] {
   const seen = new Set<string>();
 
   function matchWild(name: string, pat: string): boolean {
-    const re = new RegExp('^' + pat.replace(/\./g, '\\.').replace(/\*/g, '[^/]*') + '$');
+    // escape regex metacharacters, then translate the glob wildcards * and ?
+    const re = new RegExp(
+      '^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]') + '$'
+    );
     return re.test(name);
   }
 
@@ -85,9 +98,10 @@ function resolveGlob(pattern: string): string[] {
         if (e.name === 'node_modules' || e.name === '.git') continue;
         const full = path.join(dir, e.name);
         if (e.isDirectory()) {
-          walk(full, parts);       // keep ** in play
-          walk(full, tail);        // also try without **
-        } else if (tail.length > 0 && matchWild(e.name, tail[0]) && tail.length === 1) {
+          walk(full, parts);                     // keep ** in play
+          if (tail.length > 0) walk(full, tail); // also try without **
+        } else if (tail.length === 0 || (tail.length === 1 && matchWild(e.name, tail[0]))) {
+          // a trailing ** matches every file; otherwise the last segment must match
           if (!seen.has(full)) { seen.add(full); results.push(full); }
         }
       }
@@ -148,22 +162,32 @@ program
     let tmpDir: string | undefined;
 
     try {
+      const minScore = parseMinScore(opts.minScore);
+
       if (isGithubUrl(target)) {
         process.stderr.write(`Fetching ${target} ...\n`);
-        let localTarget: string;
+        let results: LintResult[];
         try {
           const fetched = await fetchGithubSkill(target);
           tmpDir = fetched.tmpDir;
-          localTarget = fetched.skillPath;
-        } catch {
-          const fetched = await fetchGithubAgent(target);
-          tmpDir = fetched.tmpDir;
-          localTarget = fetched.agentPath;
+          results = lintSkillWithCompanions(fetched.skillPath, cfg);
+        } catch (skillErr) {
+          try {
+            const fetched = await fetchGithubAgent(target);
+            tmpDir = fetched.tmpDir;
+            results = [lintFile(fetched.agentPath, cfg, 'agent')];
+          } catch (agentErr) {
+            throw new Error(
+              `Could not fetch a skill or agent file from ${target}\n` +
+              `  as skill: ${errMsg(skillErr)}\n` +
+              `  as agent: ${errMsg(agentErr)}`
+            );
+          }
         }
-        const results = lintDir(path.dirname(localTarget), cfg);
         results.forEach(r => { r.file = target; });
         emitResults(results, fmt, opts);
-        process.exit(hasErrors(results) || failsMinScore(results, opts.minScore) ? 1 : 0);
+        process.exitCode = hasErrors(results) || failsMinScore(results, minScore) ? 1 : 0;
+        return;
       }
 
       const stat = fs.statSync(target);
@@ -181,8 +205,9 @@ program
           reportWorkspaceTerminal(diagnosis);
           if (opts.verbose) diagnosis.files.forEach(reportTerminal);
         }
-        const belowThreshold = opts.minScore !== undefined && diagnosis.workspaceScore < parseFloat(opts.minScore);
-        process.exit(diagnosis.criticalSecurityIssues > 0 || diagnosis.totalErrors > 0 || belowThreshold ? 1 : 0);
+        const belowThreshold = minScore !== undefined && diagnosis.workspaceScore < minScore;
+        process.exitCode = diagnosis.criticalSecurityIssues > 0 || diagnosis.totalErrors > 0 || belowThreshold ? 1 : 0;
+        return;
       }
 
       const results = stat.isDirectory()
@@ -192,12 +217,14 @@ program
           : [lintFile(target, cfg)];
 
       emitResults(results, fmt, opts);
-      process.exit(hasErrors(results) || failsMinScore(results, opts.minScore) ? 1 : 0);
+      process.exitCode = hasErrors(results) || failsMinScore(results, minScore) ? 1 : 0;
     } catch (e) {
-      process.stderr.write(`Error: ${e instanceof Error ? e.message : String(e)}\n`);
-      process.exit(2);
+      process.stderr.write(`Error: ${errMsg(e)}\n`);
+      process.exitCode = 2;
     } finally {
+      // clean up before exiting — process.exit() inside the try would skip this block
       if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+      process.exit();
     }
   });
 
@@ -219,6 +246,7 @@ program
     let tmpDir: string | undefined;
 
     try {
+      const minScore = parseMinScore(opts.minScore);
       let localTarget = target;
       let displayTarget = target;
 
@@ -255,12 +283,14 @@ program
         results.forEach(reportTerminal);
       }
 
-      process.exit(hasErrors(results) || failsMinScore(results, opts.minScore) ? 1 : 0);
+      process.exitCode = hasErrors(results) || failsMinScore(results, minScore) ? 1 : 0;
     } catch (e) {
-      process.stderr.write(`Error: ${e instanceof Error ? e.message : String(e)}\n`);
-      process.exit(2);
+      process.stderr.write(`Error: ${errMsg(e)}\n`);
+      process.exitCode = 2;
     } finally {
+      // clean up before exiting — process.exit() inside the try would skip this block
       if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+      process.exit();
     }
   });
 
@@ -282,6 +312,7 @@ program
     let tmpDir: string | undefined;
 
     try {
+      const minScore = parseMinScore(opts.minScore);
       let localTarget = target;
 
       if (isGithubUrl(target)) {
@@ -304,12 +335,14 @@ program
         reportTerminal(result);
       }
 
-      process.exit(hasErrors([result]) || failsMinScore([result], opts.minScore) ? 1 : 0);
+      process.exitCode = hasErrors([result]) || failsMinScore([result], minScore) ? 1 : 0;
     } catch (e) {
-      process.stderr.write(`Error: ${e instanceof Error ? e.message : String(e)}\n`);
-      process.exit(2);
+      process.stderr.write(`Error: ${errMsg(e)}\n`);
+      process.exitCode = 2;
     } finally {
+      // clean up before exiting — process.exit() inside the try would skip this block
       if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+      process.exit();
     }
   });
 
@@ -331,6 +364,7 @@ program
     const fmt = format(opts);
 
     try {
+      const minScore = parseMinScore(opts.minScore);
       const diagnosis = diagnoseWorkspace(root, cfg);
 
       if (fmt === 'json') {
@@ -344,10 +378,10 @@ program
         if (opts.verbose) diagnosis.files.forEach(reportTerminal);
       }
 
-      const belowThreshold = opts.minScore !== undefined && diagnosis.workspaceScore < parseFloat(opts.minScore);
+      const belowThreshold = minScore !== undefined && diagnosis.workspaceScore < minScore;
       process.exit(diagnosis.criticalSecurityIssues > 0 || diagnosis.totalErrors > 0 || belowThreshold ? 1 : 0);
     } catch (e) {
-      process.stderr.write(`Error: ${e instanceof Error ? e.message : String(e)}\n`);
+      process.stderr.write(`Error: ${errMsg(e)}\n`);
       process.exit(2);
     }
   });
@@ -369,6 +403,7 @@ program
     const fmt = format(opts);
 
     try {
+      const minScore = parseMinScore(opts.minScore);
       const files = resolveGlob(pattern);
       if (files.length === 0) {
         process.stderr.write(`No files found matching: ${pattern}\n`);
@@ -388,9 +423,9 @@ program
         reportBatchSummary(results);
       }
 
-      process.exit(hasErrors(results) || failsMinScore(results, opts.minScore) ? 1 : 0);
+      process.exit(hasErrors(results) || failsMinScore(results, minScore) ? 1 : 0);
     } catch (e) {
-      process.stderr.write(`Error: ${e instanceof Error ? e.message : String(e)}\n`);
+      process.stderr.write(`Error: ${errMsg(e)}\n`);
       process.exit(2);
     }
   });

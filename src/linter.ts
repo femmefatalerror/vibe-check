@@ -34,7 +34,7 @@ function computeScore(categories: CategoryResult[]): number {
 function detectType(filePath: string, frontmatter: Record<string, unknown> | null): FileType {
   const base = path.basename(filePath).toUpperCase();
   if (base === 'SKILL.MD') return 'skill';
-  if (base === 'CLAUDE.MD' || base === 'AGENT.MD') return 'agent';
+  if (base === 'CLAUDE.MD' || base === 'AGENT.MD' || base === 'AGENTS.MD') return 'agent';
   if (filePath.includes(`${path.sep}skills${path.sep}`)) return 'skill';
   if (filePath.includes(`${path.sep}rules${path.sep}`) || filePath.includes(`${path.sep}instructions${path.sep}`)) return 'agent';
   // Frontmatter with name/description signals a skill
@@ -183,33 +183,20 @@ export function lintDir(dirPath: string, config: Config = {}): LintResult[] {
     return lintSkillWithCompanions(skillPath, config);
   }
 
-  const agentCandidates = ['CLAUDE.md', 'AGENT.md', 'agent.md'].map(f => path.join(dirPath, f));
+  const agentCandidates = ['CLAUDE.md', 'AGENT.md', 'AGENTS.md', 'agent.md', 'agents.md'].map(f => path.join(dirPath, f));
   const found = agentCandidates.filter(f => fs.existsSync(f));
   if (found.length > 0) {
     return found.map(f => lintFile(f, config, 'agent'));
   }
 
-  throw new Error(`No SKILL.md or agent file (CLAUDE.md, AGENT.md) found in ${dirPath}`);
+  throw new Error(`No SKILL.md or agent file (CLAUDE.md, AGENT.md, AGENTS.md) found in ${dirPath}`);
 }
 
 export function diagnoseWorkspace(root: string, config: Config = {}): WorkspaceDiagnosis {
   const discovered = discoverWorkspaceFiles(root);
 
   if (discovered.length === 0) {
-    return {
-      root,
-      files: [],
-      totalTokens: 0,
-      agentTokens: 0,
-      tokenBudgetWarning: false,
-      brokenRefs: [],
-      routingConflicts: [],
-      workspaceScore: 0,
-      workspaceGrade: 'F',
-      totalErrors: 0,
-      totalWarnings: 0,
-      criticalSecurityIssues: 0,
-    };
+    throw new Error(`No skills or agent files (SKILL.md, CLAUDE.md, AGENT.md, AGENTS.md) found in ${root}`);
   }
 
   const results = discovered.map(d => {

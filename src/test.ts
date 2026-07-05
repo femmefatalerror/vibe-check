@@ -7,7 +7,8 @@ import { lintSkill } from './rules/skill';
 import { lintAgent } from './rules/agent';
 import { scanScriptContent } from './rules/security';
 import { detectRoutingConflicts } from './rules/workspace';
-import { lintFile } from './linter';
+import { lintFile, lintDir } from './linter';
+import { discoverWorkspaceFiles } from './rules/workspace';
 import { reportSarif } from './reporter';
 import { analyzeTokens, findDuplicateLines } from './tokens';
 
@@ -237,6 +238,28 @@ function assert(condition: boolean, label: string): void {
       !r2.categories.flatMap(c => c.findings).some(f => f.ruleId === 'skill/routing/no-trigger'),
       'file-wide lint-disable suppresses the rule'
     );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// ── Frontmatter with blank lines: body offset stays accurate ─────────────────
+{
+  const parsed = parseContent('SKILL.md', '---\nname: test\n\ndescription: Test. Use when testing.\n---\nBody line.');
+  assert(parsed.bodyLineOffset === 5, `bodyLineOffset accounts for blank lines in frontmatter (got ${parsed.bodyLineOffset})`);
+  assert(parsed.bodyLines[0] === 'Body line.', 'body excludes the closing frontmatter delimiter');
+  assert(parsed.frontmatter?.['name'] === 'test', 'frontmatter still parses with blank lines');
+}
+
+// ── AGENTS.md is recognized as an agent file ──────────────────────────────────
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));
+  try {
+    fs.writeFileSync(path.join(tmp, 'AGENTS.md'), '# Agent\n\nYou are a test agent.\n');
+    const results = lintDir(tmp);
+    assert(results.length === 1 && results[0].type === 'agent', 'lintDir picks up AGENTS.md as an agent file');
+    const discovered = discoverWorkspaceFiles(tmp);
+    assert(discovered.some(d => d.type === 'agent'), 'workspace discovery finds AGENTS.md');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

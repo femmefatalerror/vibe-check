@@ -46,7 +46,7 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
 
         if (upper === 'SKILL.MD' || inSkillsDir) {
           add(fullPath, 'skill');
-        } else if (upper === 'CLAUDE.MD' || upper === 'AGENT.MD' || inRulesDir) {
+        } else if (upper === 'CLAUDE.MD' || upper === 'AGENT.MD' || upper === 'AGENTS.MD' || inRulesDir) {
           add(fullPath, 'agent');
         }
       }
