@@ -10,9 +10,8 @@ import {
   reportBatchSummary, reportSarif,
 } from './reporter';
 import { isGithubUrl, fetchGithubSkill, fetchGithubAgent } from './github';
+import { VERSION } from './version';
 import type { Config, LintResult, FileType } from './types';
-
-const VERSION = '0.3.0';
 
 function format(opts: { json?: boolean; markdown?: boolean; sarif?: boolean }): 'json' | 'markdown' | 'sarif' | 'terminal' {
   if (opts.sarif) return 'sarif';

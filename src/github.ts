@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { VERSION } from './version';
 
 interface GithubRef {
   owner: string;
@@ -56,7 +57,7 @@ export function parseGithubUrl(url: string): GithubRef {
 }
 
 async function apiFetch(url: string): Promise<string> {
-  const headers: Record<string, string> = { 'User-Agent': 'vibe-check/0.3.0' };
+  const headers: Record<string, string> = { 'User-Agent': `vibe-check/${VERSION}` };
   const token = process.env['GITHUB_TOKEN'];
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
