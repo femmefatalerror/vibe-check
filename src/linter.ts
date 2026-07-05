@@ -6,6 +6,7 @@ import { lintSkill } from './rules/skill';
 import { lintAgent } from './rules/agent';
 import { scanScriptContent } from './rules/security';
 import { checkBrokenRefs, detectRoutingConflicts, discoverWorkspaceFiles } from './rules/workspace';
+import { scoreCategory, computeWeightedScore } from './score';
 import type { Config, LintResult, WorkspaceDiagnosis, FileType, Grade, CategoryResult, Finding, ParsedFile } from './types';
 
 export function toGrade(score: number): Grade {
@@ -24,13 +25,6 @@ export function toGrade(score: number): Grade {
   return 'F';
 }
 
-function computeScore(categories: CategoryResult[]): number {
-  const totalWeight = categories.reduce((s, c) => s + c.weight, 0);
-  if (totalWeight === 0) return 0;
-  const weighted = categories.reduce((s, c) => s + c.score * c.weight, 0);
-  return (weighted / totalWeight) * 10; // 0-100
-}
-
 function detectType(filePath: string, frontmatter: Record<string, unknown> | null): FileType {
   const base = path.basename(filePath).toUpperCase();
   if (base === 'SKILL.MD') return 'skill';
@@ -43,12 +37,7 @@ function detectType(filePath: string, frontmatter: Record<string, unknown> | nul
 }
 
 function rescoreCategory(cat: CategoryResult): void {
-  const deductions = cat.findings.reduce((sum, f) => {
-    if (f.severity === 'error') return sum + 3;
-    if (f.severity === 'warn') return sum + 1.5;
-    return sum + 0.5;
-  }, 0);
-  cat.score = Math.max(0, 10 - deductions);
+  cat.score = scoreCategory(cat.findings);
 }
 
 function applySeverityOverrides(categories: CategoryResult[], overrides: Record<string, string>): void {
@@ -133,8 +122,7 @@ function attachCompanionFindings(result: LintResult, skillDir: string, config: C
   }
 
   rescoreCategory(security);
-  const totalWeight = result.categories.reduce((s, c) => s + c.weight, 0);
-  result.score = (result.categories.reduce((s, c) => s + c.score * c.weight, 0) / totalWeight) * 10;
+  result.score = computeWeightedScore(result.categories);
   result.grade = toGrade(result.score);
 }
 
@@ -157,7 +145,7 @@ export function lintFile(filePath: string, config: Config = {}, forcedType?: Fil
     applySeverityOverrides(categories, overrides);
   }
 
-  const score = computeScore(categories);
+  const score = computeWeightedScore(categories);
 
   return {
     file: filePath,

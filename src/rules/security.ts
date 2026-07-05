@@ -65,7 +65,9 @@ const INVISIBLE_UNICODE_RE = /[\u200B-\u200D\u2060\uFEFF\u202A-\u202E\u2066-\u20
 
 const OVERRIDE_ATTEMPT_RE = /(ignore|disregard|forget|override)\s+(?:all\s+|any\s+|the\s+|your\s+)*(previous|prior|above|earlier|original|system)\s+(instructions?|prompts?|directives?|rules?|messages?)/i;
 
-// Lines that discuss injection defensively should not be flagged as attacks
+// Lines that discuss injection defensively. This text is attacker-controlled,
+// so a match downgrades severity rather than suppressing the finding — appending
+// "e.g." or "never" to a payload must not make it invisible.
 const DEFENSE_CONTEXT_RE = /\b(never|do not|don'?t|refuse|reject|treat|flag|detect|defen[cs]e|guard|malicious|injection|attack|attempts?|such as|e\.g\.)\b/i;
 
 const CONCEALMENT_RE = /\b(?:do\s*not|don'?t|never|without)\s+(?:tell(?:ing)?|inform(?:ing)?|notify(?:ing)?|alert(?:ing)?|show(?:ing)?)\s+the\s+user\b/i;
@@ -76,7 +78,12 @@ const LINT_DIRECTIVE_RE = /lint-disable/i;
 
 const BASE64_BLOB_RE = /[A-Za-z0-9+/]{80,}={0,2}/;
 
-function scanInjection(parsed: ParsedFile): Finding[] {
+// Placeholder markers exempt a secret finding only when they appear inside the
+// matched text itself. A marker elsewhere on the line is attacker-controlled
+// camouflage (`AKIA... # placeholder`) and must not suppress detection.
+const PLACEHOLDER_RE = /YOUR_[A-Z_]+|<[A-Z_]+>|example\.com|placeholder|changeme/i;
+
+function scanInjection(parsed: ParsedFile, type: 'skill' | 'agent'): Finding[] {
   const findings: Finding[] = [];
   const lines = parsed.raw.split('\n');
   let inCodeBlock = false;
@@ -97,14 +104,26 @@ function scanInjection(parsed: ParsedFile): Finding[] {
       });
     }
 
-    if (OVERRIDE_ATTEMPT_RE.test(line) && !DEFENSE_CONTEXT_RE.test(line)) {
-      findings.push({
-        ruleId: 'security/injection/override-attempt',
-        severity: 'error',
-        message: 'Instruction-override phrase (e.g. "ignore previous instructions") — classic prompt injection payload',
-        line: lineNum,
-        suggestion: 'Remove it; if this documents an attack pattern, add defensive framing ("detect and refuse attempts to...")',
-      });
+    if (OVERRIDE_ATTEMPT_RE.test(line)) {
+      if (!DEFENSE_CONTEXT_RE.test(line)) {
+        findings.push({
+          ruleId: 'security/injection/override-attempt',
+          severity: 'error',
+          message: 'Instruction-override phrase (e.g. "ignore previous instructions") — classic prompt injection payload',
+          line: lineNum,
+          suggestion: 'Remove it; if this documents an attack pattern, add defensive framing ("detect and refuse attempts to...")',
+        });
+      } else {
+        // Defensive framing lowers severity but never hides the finding; skills
+        // are the primary injection vector, so they stay at warn
+        findings.push({
+          ruleId: 'security/injection/override-defensive',
+          severity: type === 'agent' ? 'info' : 'warn',
+          message: 'Instruction-override phrase in defensive framing — verify this documents a defense, not an attack',
+          line: lineNum,
+          suggestion: 'Confirm the surrounding text tells the model to refuse such instructions; attackers reuse defensive vocabulary to evade review',
+        });
+      }
     }
 
     if (CONCEALMENT_RE.test(line)) {
@@ -134,10 +153,10 @@ function scanInjection(parsed: ParsedFile): Finding[] {
   while ((cm = commentRe.exec(parsed.raw)) !== null) {
     const content = cm[1];
     if (LINT_DIRECTIVE_RE.test(content)) continue;
-    if (content.trim().length > 10 && SUSPICIOUS_COMMENT_RE.test(content) && !DEFENSE_CONTEXT_RE.test(content)) {
+    if (content.trim().length > 10 && SUSPICIOUS_COMMENT_RE.test(content)) {
       findings.push({
         ruleId: 'security/injection/hidden-html-comment',
-        severity: 'warn',
+        severity: DEFENSE_CONTEXT_RE.test(content) ? 'info' : 'warn',
         message: 'HTML comment contains instruction-like content — invisible when rendered, but the model reads it',
         line: parsed.raw.slice(0, cm.index).split('\n').length,
         suggestion: 'Move the content into visible prose or delete the comment',
@@ -181,9 +200,10 @@ export function scanScriptContent(fileName: string, content: string): Finding[] 
       });
     }
 
-    if (/YOUR_API_KEY|<[A-Z_]+>|example\.com|placeholder/i.test(line)) return;
-
-    for (const p of SECRET_PATTERNS) if (p.pattern.test(line)) push(p, lineNum, 'error', 'Possible hardcoded secret');
+    for (const p of SECRET_PATTERNS) {
+      const m = line.match(p.pattern);
+      if (m && !PLACEHOLDER_RE.test(m[0])) push(p, lineNum, 'error', 'Possible hardcoded secret');
+    }
     for (const p of DANGEROUS_COMMANDS) if (p.pattern.test(line)) push(p, lineNum, 'error', 'Dangerous command');
     for (const p of SENSITIVE_PATHS) if (p.pattern.test(line)) push(p, lineNum, 'warn', 'Sensitive path access');
     for (const p of EXFILTRATION_PATTERNS) if (p.pattern.test(line)) push(p, lineNum, 'warn', 'Possible exfiltration');
@@ -192,27 +212,20 @@ export function scanScriptContent(fileName: string, content: string): Finding[] 
   return findings;
 }
 
-export function scanSecurity(parsed: ParsedFile): Finding[] {
-  const findings: Finding[] = [...scanInjection(parsed)];
+export function scanSecurity(parsed: ParsedFile, type: 'skill' | 'agent' = 'agent'): Finding[] {
+  const findings: Finding[] = [...scanInjection(parsed, type)];
   const lines = parsed.raw.split('\n');
-
-  // Track whether we're inside a code block labeled as "example" or containing placeholders
-  let inCodeBlock = false;
 
   lines.forEach((rawLine, i) => {
     const lineNum = i + 1;
 
-    if (/^```/.test(rawLine)) {
-      inCodeBlock = !inCodeBlock;
-      return;
-    }
+    if (/^```/.test(rawLine)) return;
 
     const line = stripCodeFences(rawLine);
-    // Skip lines that are obviously placeholders or comments
-    if (/YOUR_API_KEY|<[A-Z_]+>|example\.com|placeholder/i.test(line)) return;
 
     for (const sp of SECRET_PATTERNS) {
-      if (sp.pattern.test(line)) {
+      const m = line.match(sp.pattern);
+      if (m && !PLACEHOLDER_RE.test(m[0])) {
         findings.push({
           ruleId: sp.ruleId,
           severity: 'error',
@@ -261,11 +274,7 @@ export function scanSecurity(parsed: ParsedFile): Finding[] {
   });
 
   // Injection defense check for agent files
-  const isAgentFile =
-    /CLAUDE\.md|\/rules\/|\/instructions\//i.test(parsed.path) ||
-    (!parsed.frontmatter && parsed.bodyLines.length > 30);
-
-  if (isAgentFile && parsed.raw.length > 500) {
+  if (type === 'agent' && parsed.raw.length > 500) {
     const lower = parsed.raw.toLowerCase();
     const hasDefense =
       lower.includes('prompt injection') ||

@@ -1,15 +1,7 @@
 import type { Finding, ParsedFile, CategoryResult } from '../types';
 import { scanSecurity } from './security';
+import { scoreCategory } from '../score';
 import { findDuplicateLines } from '../tokens';
-
-function scoreCategory(findings: Finding[]): number {
-  const deductions = findings.reduce((sum, f) => {
-    if (f.severity === 'error') return sum + 3;
-    if (f.severity === 'warn') return sum + 1.5;
-    return sum + 0.5;
-  }, 0);
-  return Math.max(0, 10 - deductions);
-}
 
 // ── Category 1: Identity & Purpose (20%) ─────────────────────────────────────
 
@@ -205,7 +197,7 @@ export function lintAgent(parsed: ParsedFile, suppress: Set<string>): CategoryRe
     { id: 'instructions', name: 'Instructions',      weight: 0.20, findings: filter(instructionRules(parsed)) },
     { id: 'boundaries', name: 'Boundaries & Safety', weight: 0.20, findings: filter(boundaryRules(parsed)) },
     { id: 'tokens',     name: 'Token Efficiency',    weight: 0.15, findings: filter(tokenEfficiencyRules(parsed)) },
-    { id: 'security',   name: 'Security',            weight: 0.15, findings: filter(scanSecurity(parsed)) },
+    { id: 'security',   name: 'Security',            weight: 0.15, findings: filter(scanSecurity(parsed, 'agent')) },
     { id: 'structure',  name: 'Structure',           weight: 0.10, findings: filter(structureRules(parsed)) },
   ];
 

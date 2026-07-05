@@ -1,4 +1,5 @@
 import pc from 'picocolors';
+import * as path from 'path';
 import type { LintResult, WorkspaceDiagnosis, Severity } from './types';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -376,6 +377,3 @@ export function reportBatchSummary(results: LintResult[]): void {
   console.log(pc.bold(pc.cyan('━'.repeat(56))));
   console.log('');
 }
-
-// re-export path for use in workspace terminal report
-import * as path from 'path';

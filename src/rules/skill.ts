@@ -1,19 +1,11 @@
 import type { Finding, ParsedFile, CategoryResult } from '../types';
 import { scanSecurity } from './security';
+import { scoreCategory } from '../score';
 import { analyzeTokens, findDuplicateLines } from '../tokens';
 
 const VAGUE_NAMES = new Set(['helper', 'utils', 'tools', 'misc', 'common', 'shared', 'data', 'files', 'docs', 'general', 'stuff']);
 const RESERVED_WORDS = ['anthropic', 'claude'];
 const NAME_RE = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
-
-function scoreCategory(findings: Finding[]): number {
-  const deductions = findings.reduce((sum, f) => {
-    if (f.severity === 'error') return sum + 3;
-    if (f.severity === 'warn') return sum + 1.5;
-    return sum + 0.5;
-  }, 0);
-  return Math.max(0, 10 - deductions);
-}
 
 // ── Category 1: Identity & Metadata (20%) ────────────────────────────────────
 
@@ -473,7 +465,7 @@ export function lintSkill(parsed: ParsedFile, suppress: Set<string>): CategoryRe
     { id: 'structure',   name: 'Structure',             weight: 0.15, findings: filter(structureRules(parsed)) },
     { id: 'content',     name: 'Content Quality',       weight: 0.15, findings: filter(contentRules(parsed)) },
     { id: 'robustness',  name: 'Robustness',            weight: 0.10, findings: filter(robustnessRules(parsed)) },
-    { id: 'security',    name: 'Security',              weight: 0.15, findings: filter(scanSecurity(parsed)) },
+    { id: 'security',    name: 'Security',              weight: 0.15, findings: filter(scanSecurity(parsed, 'skill')) },
     { id: 'portability', name: 'Portability',           weight: 0.10, findings: filter(portabilityRules(parsed)) },
   ];
 
