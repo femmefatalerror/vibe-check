@@ -8,7 +8,7 @@ export interface DiscoveredFile {
 }
 
 // Repo-metadata files that are never skills, even inside a skills/ directory
-const DOC_FILENAMES = new Set([
+export const DOC_FILENAMES = new Set([
   'README.MD', 'CHANGELOG.MD', 'CONTRIBUTING.MD', 'LICENSE.MD',
   'CODE_OF_CONDUCT.MD', 'SECURITY.MD',
 ]);

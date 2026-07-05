@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Companion markdown referenced from `SKILL.md` (directly or transitively) is now security-scanned like the skill itself, since Claude reads it into context; findings are attributed to the companion file
+- New `security/companion/unreferenced-file` warning: markdown or scripts shipped in a skill directory but never referenced from `SKILL.md` (conventional docs like `README.md` are exempt)
+
 ### Fixed
 - Workspace discovery matches `skills/`, `rules/`, and `instructions/` directories relative to the workspace root, so a repo checked out at e.g. `~/dev/skills` no longer treats every markdown file as a skill
 - Repo docs (`README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, ...) and companion references next to a `SKILL.md` inside a skills tree are no longer linted as skills

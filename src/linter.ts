@@ -1,11 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseFile } from './parse';
+import { parseFile, parseContent } from './parse';
 import { analyzeTokens } from './tokens';
 import { lintSkill } from './rules/skill';
 import { lintAgent } from './rules/agent';
-import { scanScriptContent } from './rules/security';
-import { checkBrokenRefs, detectRoutingConflicts, discoverWorkspaceFiles } from './rules/workspace';
+import { scanScriptContent, scanSecurity } from './rules/security';
+import { checkBrokenRefs, detectRoutingConflicts, discoverWorkspaceFiles, DOC_FILENAMES } from './rules/workspace';
 import { scoreCategory, computeWeightedScore } from './score';
 import type { Config, LintResult, WorkspaceDiagnosis, FileType, Grade, CategoryResult, Finding, ParsedFile } from './types';
 
@@ -77,47 +77,102 @@ function applyInlineDisables(categories: CategoryResult[], parsed: ParsedFile): 
 const SCRIPT_EXTENSIONS = new Set(['.sh', '.bash', '.zsh', '.py', '.js', '.ts', '.rb', '.pl']);
 const MAX_SCRIPT_BYTES = 512 * 1024;
 
-// Skills ship companion scripts that execute with the user's permissions —
-// scan them with the same security patterns and fold findings into Security.
-function attachCompanionFindings(result: LintResult, skillDir: string, config: Config): void {
+// Skills ship companion files alongside SKILL.md. Scripts execute with the
+// user's permissions and markdown referenced from SKILL.md is read into
+// Claude's context — both get security-scanned, with findings folded into
+// the skill's Security category. Unreferenced companions are flagged instead.
+function attachCompanionFindings(result: LintResult, skillDir: string, config: Config, skillRaw?: string): void {
   const suppress = new Set(config.suppress ?? []);
   const overrides = config.severity ?? {};
   const security = result.categories.find(c => c.id === 'security');
   if (!security) return;
 
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(skillDir, { withFileTypes: true });
-  } catch {
-    return;
-  }
+  const push = (f: Finding) => {
+    if (suppress.has(f.ruleId)) return;
+    if (overrides[f.ruleId]) f.severity = overrides[f.ruleId];
+    security.findings.push(f);
+  };
 
-  const scan = (filePath: string, relName: string) => {
-    let stat: fs.Stats;
-    try { stat = fs.statSync(filePath); } catch { return; }
-    if (!stat.isFile() || stat.size > MAX_SCRIPT_BYTES) return;
-
-    const content = fs.readFileSync(filePath, 'utf-8');
-    for (const f of scanScriptContent(relName, content)) {
-      if (suppress.has(f.ruleId)) continue;
-      if (overrides[f.ruleId]) f.severity = overrides[f.ruleId];
-      security.findings.push(f);
+  const readCapped = (filePath: string): string | null => {
+    try {
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile() || stat.size > MAX_SCRIPT_BYTES) return null;
+      return fs.readFileSync(filePath, 'utf-8');
+    } catch {
+      return null;
     }
   };
 
-  for (const e of entries) {
-    const full = path.join(skillDir, e.name);
-    if (e.isFile() && SCRIPT_EXTENSIONS.has(path.extname(e.name).toLowerCase())) {
-      scan(full, e.name);
-    } else if (e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules') {
-      // one level deep covers the conventional scripts/ subdirectory
-      let sub: fs.Dirent[] = [];
-      try { sub = fs.readdirSync(full, { withFileTypes: true }); } catch { /* skip */ }
-      for (const s of sub) {
-        if (s.isFile() && SCRIPT_EXTENSIONS.has(path.extname(s.name).toLowerCase())) {
-          scan(path.join(full, s.name), path.join(e.name, s.name));
+  // Collect companions one level deep (covers conventional scripts/ and references/)
+  const companions: { full: string; relName: string; isMd: boolean }[] = [];
+  const collect = (dir: string, prefix: string, recurse: boolean) => {
+    let entries: fs.Dirent[] = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      const isMd = e.name.toLowerCase().endsWith('.md');
+      if (e.isFile() && (isMd || SCRIPT_EXTENSIONS.has(path.extname(e.name).toLowerCase()))) {
+        if (e.name.toUpperCase() === 'SKILL.MD') continue;
+        companions.push({ full, relName: path.join(prefix, e.name), isMd });
+      } else if (recurse && e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules') {
+        collect(full, path.join(prefix, e.name), false);
+      }
+    }
+  };
+  collect(skillDir, '', true);
+  if (companions.length === 0) return;
+
+  // Walk the reference graph from SKILL.md: a companion is referenced when its
+  // filename appears in SKILL.md or in any already-referenced companion .md
+  const texts: string[] = [(skillRaw ?? readCapped(path.join(skillDir, 'SKILL.md')) ?? '').toLowerCase()];
+  const referenced = new Set<string>();
+  const mdContent = new Map<string, string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const c of companions) {
+      if (referenced.has(c.relName)) continue;
+      const base = path.basename(c.relName).toLowerCase();
+      if (texts.some(t => t.includes(base))) {
+        referenced.add(c.relName);
+        changed = true;
+        if (c.isMd) {
+          const content = readCapped(c.full);
+          if (content !== null) {
+            mdContent.set(c.relName, content);
+            texts.push(content.toLowerCase());
+          }
         }
       }
+    }
+  }
+
+  for (const c of companions) {
+    if (c.isMd) {
+      // Referenced markdown enters Claude's context when the skill runs —
+      // scan it for injection with the same rules as SKILL.md itself
+      const content = mdContent.get(c.relName);
+      if (content !== undefined) {
+        for (const f of scanSecurity(parseContent(c.relName, content), 'skill')) {
+          push({ ...f, file: c.relName });
+        }
+      }
+    } else {
+      // Scripts are scanned regardless of reference — they execute directly
+      const content = readCapped(c.full);
+      if (content !== null) {
+        for (const f of scanScriptContent(c.relName, content)) push(f);
+      }
+    }
+
+    if (!referenced.has(c.relName) && !DOC_FILENAMES.has(path.basename(c.relName).toUpperCase())) {
+      push({
+        ruleId: 'security/companion/unreferenced-file',
+        severity: 'warn',
+        message: `Companion file is never referenced from SKILL.md — dead weight, or a place to hide content`,
+        file: c.relName,
+        suggestion: 'Reference it from SKILL.md or remove it; unreferenced markdown is not security-scanned',
+      });
     }
   }
 
@@ -164,10 +219,11 @@ export function lintParsed(parsed: ParsedFile, config: Config = {}, forcedType?:
   };
 }
 
-// Lint a SKILL.md and scan its sibling companion scripts
+// Lint a SKILL.md and scan its companion scripts and referenced markdown
 export function lintSkillWithCompanions(skillPath: string, config: Config = {}): LintResult[] {
-  const result = lintFile(skillPath, config, 'skill');
-  attachCompanionFindings(result, path.dirname(skillPath), config);
+  const parsed = parseFile(skillPath);
+  const result = lintParsed(parsed, config, 'skill');
+  attachCompanionFindings(result, path.dirname(skillPath), config, parsed.raw);
   return [result];
 }
 
@@ -196,7 +252,11 @@ export function diagnoseWorkspace(root: string, config: Config = {}): WorkspaceD
   const parsedFiles = discovered.map(d => parseFile(d.path));
   const results = discovered.map((d, i) => {
     const result = lintParsed(parsedFiles[i], config, d.type);
-    if (d.type === 'skill') attachCompanionFindings(result, path.dirname(d.path), config);
+    // Companions only make sense for a dedicated skill directory — flat-layout
+    // skills (skills/foo.md) share their directory with sibling skills
+    if (d.type === 'skill' && path.basename(d.path).toUpperCase() === 'SKILL.MD') {
+      attachCompanionFindings(result, path.dirname(d.path), config, parsedFiles[i].raw);
+    }
     return result;
   });
 
