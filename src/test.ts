@@ -389,6 +389,62 @@ function assert(condition: boolean, label: string): void {
   }
 }
 
+// ── APM package repos: .apm source tree is discovered, deployed copies skipped ─
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));
+  try {
+    const skillMd = '---\nname: my-skill\ndescription: Test. Use when testing.\n---\n\n# Body\n';
+    fs.mkdirSync(path.join(tmp, '.apm', 'skills', 'my-skill'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.apm', 'agents'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.apm', 'instructions'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.claude', 'skills', 'my-skill'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, 'apm_modules', 'owner', 'repo', '.apm', 'skills', 'dep'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'apm.yml'), 'name: my-package\n');
+    fs.writeFileSync(path.join(tmp, '.apm', 'skills', 'my-skill', 'SKILL.md'), skillMd);
+    fs.writeFileSync(path.join(tmp, '.apm', 'skills', 'my-skill', 'REFERENCE.md'), '# Companion\n');
+    fs.writeFileSync(path.join(tmp, '.apm', 'agents', 'reviewer.agent.md'), '# Reviewer\n\nYou review code.\n');
+    fs.writeFileSync(path.join(tmp, '.apm', 'instructions', 'style.md'), '# Style\n\nFollow PEP 8.\n');
+    fs.writeFileSync(path.join(tmp, '.claude', 'skills', 'my-skill', 'SKILL.md'), skillMd);
+    fs.writeFileSync(path.join(tmp, 'apm_modules', 'owner', 'repo', '.apm', 'skills', 'dep', 'SKILL.md'), skillMd);
+
+    const discovered = discoverWorkspaceFiles(tmp);
+    const names = discovered.map(d => path.relative(tmp, d.path));
+    assert(names.includes(path.join('.apm', 'skills', 'my-skill', 'SKILL.md')), 'APM source skill is discovered');
+    assert(
+      discovered.find(d => d.path.endsWith('reviewer.agent.md'))?.type === 'agent',
+      '.agent.md file in .apm/agents is discovered as an agent'
+    );
+    assert(
+      discovered.find(d => d.path.endsWith(path.join('instructions', 'style.md')))?.type === 'agent',
+      '.apm/instructions files are discovered as agents'
+    );
+    assert(!names.includes(path.join('.apm', 'skills', 'my-skill', 'REFERENCE.md')), 'companion next to APM SKILL.md is not a skill');
+    assert(!names.some(n => n.startsWith('.claude')), 'deployed copy under .claude/skills is skipped when .apm source exists');
+    assert(!names.some(n => n.startsWith('apm_modules')), 'apm_modules dependencies are not scanned');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// ── APM consumer repos: deployed .agents/skills is scanned when no .apm source ─
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));
+  try {
+    fs.mkdirSync(path.join(tmp, '.agents', 'skills', 'installed-skill'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, '.agents', 'skills', 'installed-skill', 'SKILL.md'),
+      '---\nname: installed-skill\ndescription: Test. Use when testing.\n---\n\n# Body\n'
+    );
+    const names = discoverWorkspaceFiles(tmp).map(d => path.relative(tmp, d.path));
+    assert(
+      names.includes(path.join('.agents', 'skills', 'installed-skill', 'SKILL.md')),
+      'installed skill under .agents/skills is discovered when there is no .apm source tree'
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // ── Companion markdown: referenced files are scanned, unreferenced are flagged ─
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));

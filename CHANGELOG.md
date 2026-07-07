@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- APM (Microsoft Agent Package Manager) repos are supported in workspace scanning: the `.apm/` source tree is discovered (`skills/`, `agents/`, `instructions/`), `*.agent.md` files are recognized as agents, and `apm_modules/` dependencies are skipped
+- Deployed APM copies under `.claude/skills/`, `.agents/skills/`, and `.kiro/skills/` are skipped when the `.apm/` source tree is present (the source is linted instead); consumer repos without `.apm/` get their installed `.agents/`/`.kiro` skills scanned
+
 ### Changed
 - Routing & Discovery checks (trigger condition, voice, description vagueness) are skipped for skills with `disable-model-invocation: true`, since Claude never routes to them by description
 

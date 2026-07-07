@@ -13,6 +13,19 @@ export const DOC_FILENAMES = new Set([
   'CODE_OF_CONDUCT.MD', 'SECURITY.MD',
 ]);
 
+// Dot-directories that hold agent/skill sources: .claude (Claude Code),
+// .apm (APM package source), .agents/.kiro (cross-client skill dirs)
+const SOURCE_DOT_DIRS = new Set(['.claude', '.apm', '.agents', '.kiro']);
+
+// `apm install` copies .apm/skills/* into these harness dirs. When the .apm
+// source tree is present, lint the source and skip the deployed copies.
+function isApmDeployedCopy(parent: string, name: string): boolean {
+  if (name !== 'skills') return false;
+  const base = path.basename(parent);
+  if (base !== '.claude' && base !== '.agents' && base !== '.kiro') return false;
+  return fs.existsSync(path.join(path.dirname(parent), '.apm', 'skills'));
+}
+
 export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
   const discovered: DiscoveredFile[] = [];
   const seen = new Set<string>();
@@ -44,20 +57,20 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
     const hasSiblingSkill = entries.some(e => e.isFile() && e.name.toUpperCase() === 'SKILL.MD');
 
     for (const e of entries) {
-      if (e.name === 'node_modules' || e.name === '.git' || e.name === 'dist') continue;
-      // allow .claude directory even though it starts with '.'
-      if (e.name.startsWith('.') && e.name !== '.claude') continue;
+      if (e.name === 'node_modules' || e.name === '.git' || e.name === 'dist' || e.name === 'apm_modules') continue;
+      if (e.name.startsWith('.') && !SOURCE_DOT_DIRS.has(e.name)) continue;
 
       const fullPath = path.join(dir, e.name);
 
       if (e.isDirectory()) {
+        if (isApmDeployedCopy(dir, e.name)) continue;
         walk(fullPath);
       } else if (e.name.endsWith('.md')) {
         const upper = e.name.toUpperCase();
 
         if (upper === 'SKILL.MD') {
           add(fullPath, 'skill');
-        } else if (upper === 'CLAUDE.MD' || upper === 'AGENT.MD' || upper === 'AGENTS.MD') {
+        } else if (upper === 'CLAUDE.MD' || upper === 'AGENT.MD' || upper === 'AGENTS.MD' || upper.endsWith('.AGENT.MD')) {
           add(fullPath, 'agent');
         } else if (inSkillsDir) {
           // Loose .md in a skills tree is a flat-layout skill — but not repo
