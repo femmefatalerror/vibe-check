@@ -2,6 +2,7 @@ import type { Finding, ParsedFile, CategoryResult } from '../types';
 import { scanSecurity } from './security';
 import { scoreCategory } from '../score';
 import { findDuplicateLines } from '../tokens';
+import { harnessFrontmatterRules } from './harness';
 
 // ── Category 1: Identity & Purpose (20%) ─────────────────────────────────────
 
@@ -193,7 +194,7 @@ export function lintAgent(parsed: ParsedFile, suppress: Set<string>): CategoryRe
   const filter = (findings: Finding[]) => findings.filter(f => !suppress.has(f.ruleId));
 
   const defs: Array<{ id: string; name: string; weight: number; findings: Finding[] }> = [
-    { id: 'purpose',    name: 'Identity & Purpose',  weight: 0.20, findings: filter(purposeRules(parsed)) },
+    { id: 'purpose',    name: 'Identity & Purpose',  weight: 0.20, findings: filter([...harnessFrontmatterRules(parsed), ...purposeRules(parsed)]) },
     { id: 'instructions', name: 'Instructions',      weight: 0.20, findings: filter(instructionRules(parsed)) },
     { id: 'boundaries', name: 'Boundaries & Safety', weight: 0.20, findings: filter(boundaryRules(parsed)) },
     { id: 'tokens',     name: 'Token Efficiency',    weight: 0.15, findings: filter(tokenEfficiencyRules(parsed)) },

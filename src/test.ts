@@ -475,6 +475,44 @@ function assert(condition: boolean, label: string): void {
   }
 }
 
+// ── Harness-specific frontmatter validation ───────────────────────────────────
+{
+  const metaFindings = (path: string, content: string) => {
+    const cats = lintAgent(parseContent(path, content), new Set());
+    return cats.find(c => c.id === 'purpose')!.findings.filter(f => f.ruleId.startsWith('agent/meta/'));
+  };
+
+  // Claude Code subagent: name + description required
+  let f = metaFindings('.claude/agents/reviewer.md', '---\ndescription: Reviews PRs\n---\n\nYou review PRs.\n');
+  assert(f.some(x => x.ruleId === 'agent/meta/missing-name'), 'Claude subagent without name is flagged');
+  f = metaFindings('.claude/agents/reviewer.md', '---\nname: My_Reviewer\ndescription: Reviews PRs\n---\n\nBody.\n');
+  assert(f.some(x => x.ruleId === 'agent/meta/name-format'), 'Claude subagent name format is checked');
+  f = metaFindings('.claude/agents/reviewer.md', '---\nname: reviewer\ndescription: Reviews PRs\n---\n\nBody.\n');
+  assert(f.length === 0, 'valid Claude subagent frontmatter has no meta findings');
+
+  // OpenCode agent: description required, mode enum, deprecated tools
+  f = metaFindings('.opencode/agent/steward.md', '---\nmode: banana\n---\n\nBody.\n');
+  assert(f.some(x => x.ruleId === 'agent/meta/missing-description'), 'OpenCode agent without description is flagged');
+  assert(f.some(x => x.ruleId === 'agent/meta/invalid-mode'), 'OpenCode agent with invalid mode is flagged');
+  f = metaFindings('.opencode/agent/steward.md', '---\ndescription: Reviews code\nmode: subagent\ntools:\n  bash: false\n---\n\nBody.\n');
+  assert(f.some(x => x.ruleId === 'agent/meta/deprecated-tools') && f.length === 1, 'OpenCode deprecated tools field is info-flagged, rest is valid');
+
+  // Copilot custom agent: description required, target enum
+  f = metaFindings('.github/agents/planner.agent.md', '---\nname: planner\ntarget: slack\n---\n\nBody.\n');
+  assert(f.some(x => x.ruleId === 'agent/meta/missing-description'), 'Copilot agent without description is flagged');
+  assert(f.some(x => x.ruleId === 'agent/meta/invalid-target'), 'Copilot agent with invalid target is flagged');
+
+  // Copilot instructions: applyTo expected
+  f = metaFindings('.github/instructions/python.instructions.md', 'Follow PEP 8.\n');
+  assert(f.some(x => x.ruleId === 'agent/meta/missing-apply-to'), 'instructions.md without applyTo is flagged');
+  f = metaFindings('.github/instructions/python.instructions.md', '---\napplyTo: "**/*.py"\n---\n\nFollow PEP 8.\n');
+  assert(f.length === 0, 'instructions.md with applyTo glob is clean');
+
+  // Generic agent files have no schema to enforce
+  f = metaFindings('CLAUDE.md', '# Project\n\nUse tabs.\n');
+  assert(f.length === 0, 'CLAUDE.md gets no harness frontmatter findings');
+}
+
 // ── Companion markdown: referenced files are scanned, unreferenced are flagged ─
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));

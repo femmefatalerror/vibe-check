@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - OpenCode and Copilot harness files are linted: `.opencode/` (agent definitions in `agent/`, skills), `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, `.github/agents/*.agent.md`, and `.github/skills/` are discovered in workspace scans; `copilot-instructions.md` and `*.instructions.md` are detected as agent files when linted directly
 - Claude Code subagents in `.claude/agents/*.md` are discovered as agent files
+- Harness-specific frontmatter validation for agent files, keyed off the file's path/suffix: Claude Code subagents (`name` + `description` required, name format), OpenCode agents (`description` required, `mode` enum, `temperature` range, deprecated `tools` field), Copilot custom agents (`description` required, `target` enum), and Copilot `*.instructions.md` (`applyTo` glob expected); new rules under `agent/meta/*`
 
 ### Changed
 - Routing & Discovery checks (trigger condition, voice, description vagueness) are skipped for skills with `disable-model-invocation: true`, since Claude never routes to them by description
