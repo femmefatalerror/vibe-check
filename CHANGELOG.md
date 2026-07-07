@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-07
+
 ### Added
 - Bundled agent skill (`vibe-check install-skill`, installs globally; `--project` for a repo-local install): runs the linter, applies per-rule fix recipes (routing, structure, content, token optimization), triages security findings without auto-fixing them, and re-runs to verify the score improved; the skill passes its own linter at 100/100, enforced in CI
 - `install-skill --target <harness>` installs the skill for other harnesses: `opencode` (`~/.config/opencode/skills`), `copilot` (`~/.copilot/skills`), or `agents` (the cross-client `.agents/skills` dir read by Copilot, Cursor, OpenCode, Codex, Gemini, and Windsurf); default remains `claude`
@@ -72,7 +74,8 @@ Initial release: linter and security scanner for Claude skills, agents, and AI
 workspaces — skill/agent lint rules, workspace diagnosis, injection scanning,
 GitHub URL analysis, SARIF output, and configurable rule suppression.
 
-[Unreleased]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/femmefatalerror/vibe-check/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.0...v0.4.1
