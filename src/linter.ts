@@ -28,7 +28,11 @@ export function toGrade(score: number): Grade {
 function detectType(filePath: string, frontmatter: Record<string, unknown> | null): FileType {
   const base = path.basename(filePath).toUpperCase();
   if (base === 'SKILL.MD') return 'skill';
-  if (base === 'CLAUDE.MD' || base === 'AGENT.MD' || base === 'AGENTS.MD' || base.endsWith('.AGENT.MD')) return 'agent';
+  if (
+    base === 'CLAUDE.MD' || base === 'AGENT.MD' || base === 'AGENTS.MD' ||
+    base === 'COPILOT-INSTRUCTIONS.MD' ||
+    base.endsWith('.AGENT.MD') || base.endsWith('.INSTRUCTIONS.MD')
+  ) return 'agent';
   if (filePath.includes(`${path.sep}skills${path.sep}`)) return 'skill';
   if (filePath.includes(`${path.sep}rules${path.sep}`) || filePath.includes(`${path.sep}instructions${path.sep}`)) return 'agent';
   // Frontmatter with name/description signals a skill

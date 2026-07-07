@@ -14,16 +14,22 @@ export const DOC_FILENAMES = new Set([
 ]);
 
 // Dot-directories that hold agent/skill sources: .claude (Claude Code),
-// .apm (APM package source), .agents/.kiro (cross-client skill dirs)
-const SOURCE_DOT_DIRS = new Set(['.claude', '.apm', '.agents', '.kiro']);
+// .apm (APM package source), .agents/.kiro (cross-client skill dirs),
+// .opencode (OpenCode), .github (Copilot instructions/agents/skills)
+const SOURCE_DOT_DIRS = new Set(['.claude', '.apm', '.agents', '.kiro', '.opencode', '.github']);
 
-// `apm install` copies .apm/skills/* into these harness dirs. When the .apm
+// `apm install` copies .apm sources into these harness dirs. When the .apm
 // source tree is present, lint the source and skip the deployed copies.
 function isApmDeployedCopy(parent: string, name: string): boolean {
-  if (name !== 'skills') return false;
   const base = path.basename(parent);
-  if (base !== '.claude' && base !== '.agents' && base !== '.kiro') return false;
-  return fs.existsSync(path.join(path.dirname(parent), '.apm', 'skills'));
+  const root = path.dirname(parent);
+  if (name === 'skills' && (base === '.claude' || base === '.agents' || base === '.kiro')) {
+    return fs.existsSync(path.join(root, '.apm', 'skills'));
+  }
+  if (name === 'agents' && base === '.github') {
+    return fs.existsSync(path.join(root, '.apm', 'agents'));
+  }
+  return false;
 }
 
 export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
@@ -54,6 +60,10 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
     const segments = rel === '' ? [] : rel.split(path.sep);
     const inSkillsDir = segments.includes('skills');
     const inRulesDir = segments.includes('rules') || segments.includes('instructions');
+    // agent-definition dirs (.claude/agents, .opencode/agent, .github/agents) —
+    // only inside a harness dot-dir, so a repo's own agents/ docs dir stays out
+    const inAgentDir = (segments.includes('agent') || segments.includes('agents'))
+      && segments.some(s => SOURCE_DOT_DIRS.has(s));
     const hasSiblingSkill = entries.some(e => e.isFile() && e.name.toUpperCase() === 'SKILL.MD');
 
     for (const e of entries) {
@@ -70,13 +80,17 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
 
         if (upper === 'SKILL.MD') {
           add(fullPath, 'skill');
-        } else if (upper === 'CLAUDE.MD' || upper === 'AGENT.MD' || upper === 'AGENTS.MD' || upper.endsWith('.AGENT.MD')) {
+        } else if (
+          upper === 'CLAUDE.MD' || upper === 'AGENT.MD' || upper === 'AGENTS.MD' ||
+          upper === 'COPILOT-INSTRUCTIONS.MD' ||
+          upper.endsWith('.AGENT.MD') || upper.endsWith('.INSTRUCTIONS.MD')
+        ) {
           add(fullPath, 'agent');
         } else if (inSkillsDir) {
           // Loose .md in a skills tree is a flat-layout skill — but not repo
           // docs, and not companion references living next to a SKILL.md
           if (!DOC_FILENAMES.has(upper) && !hasSiblingSkill) add(fullPath, 'skill');
-        } else if (inRulesDir) {
+        } else if ((inRulesDir || inAgentDir) && !DOC_FILENAMES.has(upper)) {
           add(fullPath, 'agent');
         }
       }

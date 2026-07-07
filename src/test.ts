@@ -446,6 +446,35 @@ function assert(condition: boolean, label: string): void {
   }
 }
 
+// ── OpenCode and Copilot harness files are discovered ─────────────────────────
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));
+  try {
+    fs.mkdirSync(path.join(tmp, '.opencode', 'agent'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.opencode', 'skills', 'os-skill'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.github', 'instructions'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.github', 'ISSUE_TEMPLATE'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.claude', 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, '.opencode', 'agent', 'steward.md'), '---\ndescription: Reviews code\nmode: subagent\n---\n\nYou review code.\n');
+    fs.writeFileSync(path.join(tmp, '.opencode', 'skills', 'os-skill', 'SKILL.md'), '---\nname: os-skill\ndescription: Test. Use when testing.\n---\n\n# Body\n');
+    fs.writeFileSync(path.join(tmp, '.github', 'copilot-instructions.md'), '# Repo instructions\n\nUse tabs.\n');
+    fs.writeFileSync(path.join(tmp, '.github', 'instructions', 'python.instructions.md'), '---\napplyTo: "**/*.py"\n---\n\nFollow PEP 8.\n');
+    fs.writeFileSync(path.join(tmp, '.github', 'ISSUE_TEMPLATE', 'bug.md'), '# Bug report\n');
+    fs.writeFileSync(path.join(tmp, '.claude', 'agents', 'reviewer.md'), '---\ndescription: Reviews PRs\n---\n\nYou review PRs.\n');
+
+    const discovered = discoverWorkspaceFiles(tmp);
+    const byName = (end: string) => discovered.find(d => d.path.endsWith(end));
+    assert(byName(path.join('agent', 'steward.md'))?.type === 'agent', 'OpenCode .opencode/agent/*.md is an agent');
+    assert(byName(path.join('os-skill', 'SKILL.md'))?.type === 'skill', 'OpenCode .opencode/skills SKILL.md is a skill');
+    assert(byName('copilot-instructions.md')?.type === 'agent', 'Copilot .github/copilot-instructions.md is an agent');
+    assert(byName('python.instructions.md')?.type === 'agent', 'Copilot *.instructions.md is an agent');
+    assert(byName(path.join('agents', 'reviewer.md'))?.type === 'agent', 'Claude Code .claude/agents/*.md is an agent');
+    assert(!byName('bug.md'), '.github/ISSUE_TEMPLATE files are not discovered');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // ── Companion markdown: referenced files are scanned, unreferenced are flagged ─
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));
