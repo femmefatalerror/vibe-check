@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Bundled agent skill (`vibe-check install-skill`, installs globally; `--project` for a repo-local install): runs the linter, applies per-rule fix recipes (routing, structure, content, token optimization), triages security findings without auto-fixing them, and re-runs to verify the score improved; the skill passes its own linter at 100/100, enforced in CI
+- `install-skill --target <harness>` installs the skill for other harnesses: `opencode` (`~/.config/opencode/skills`), `copilot` (`~/.copilot/skills`), or `agents` (the cross-client `.agents/skills` dir read by Copilot, Cursor, OpenCode, Codex, Gemini, and Windsurf); default remains `claude`
 - APM (Microsoft Agent Package Manager) repos are supported in workspace scanning: the `.apm/` source tree is discovered (`skills/`, `agents/`, `instructions/`), `*.agent.md` files are recognized as agents, and `apm_modules/` dependencies are skipped
 - Deployed APM copies under `.claude/skills/`, `.agents/skills/`, and `.kiro/skills/` are skipped when the `.apm/` source tree is present (the source is linted instead); consumer repos without `.apm/` get their installed `.agents/`/`.kiro` skills scanned
 

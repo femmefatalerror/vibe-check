@@ -58,6 +58,25 @@ Useful flags: `--json`, `--markdown`, `--sarif` (GitHub code scanning), `--min-s
 
 See the [docs](https://femmefatalerror.github.io/vibe-check/) for the full rule reference, scoring details, configuration, and CI recipes.
 
+## Claude skill: lint → fix → verify
+
+vibe-check ships a Claude Code skill that runs the linter, applies fixes for
+the findings (with per-rule recipes for routing, structure, token cost, and a
+hands-off triage flow for security findings), and re-runs to show the
+before/after score:
+
+```bash
+vibe-check install-skill                    # → ~/.claude/skills/vibe-check (all projects)
+vibe-check install-skill --project          # → ./.claude/skills (this project only)
+vibe-check install-skill --target opencode  # → ~/.config/opencode/skills
+vibe-check install-skill --target copilot   # → ~/.copilot/skills
+vibe-check install-skill --target agents    # → ~/.agents/skills (read by Copilot,
+                                            #   Cursor, OpenCode, Codex, Gemini, Windsurf)
+```
+
+Then ask your agent to "vibe check my skills". The skill passes its own
+linter at 100/100 — enforced in CI.
+
 ## License
 
 MIT

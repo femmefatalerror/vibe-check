@@ -8,6 +8,7 @@ import { lintAgent } from './rules/agent';
 import { scanScriptContent } from './rules/security';
 import { detectRoutingConflicts } from './rules/workspace';
 import { lintFile, lintDir, lintParsed, lintSkillWithCompanions } from './linter';
+import { installSkill } from './install';
 import { discoverWorkspaceFiles } from './rules/workspace';
 import { reportSarif } from './reporter';
 import { analyzeTokens, findDuplicateLines } from './tokens';
@@ -510,6 +511,66 @@ function assert(condition: boolean, label: string): void {
     sarif.runs[0].results.some((r: { ruleId: string }) => r.ruleId === 'skill/meta/no-frontmatter'),
     'SARIF output is valid and contains findings'
   );
+}
+
+// ── Bundled skill: passes its own linter ──────────────────────────────────────
+{
+  const skillPath = path.join(__dirname, '..', 'skills', 'vibe-check', 'SKILL.md');
+  const results = lintSkillWithCompanions(skillPath);
+  const findings = results.flatMap(r => r.categories.flatMap(c => c.findings));
+  assert(
+    findings.length === 0,
+    `bundled vibe-check skill has no findings (got: ${findings.map(f => f.ruleId).join(', ') || 'none'})`
+  );
+  assert(results[0].score >= 95, `bundled vibe-check skill scores >= 95 (got ${results[0].score})`);
+}
+
+// ── install-skill copies the bundled skill and refuses silent overwrite ───────
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));
+  try {
+    const { dest, files } = installSkill({ cwd: tmp, project: true });
+    assert(
+      dest === path.join(tmp, '.claude', 'skills', 'vibe-check') &&
+      files.includes('SKILL.md') && files.includes('fix-recipes.md'),
+      'installSkill copies the bundled skill into .claude/skills'
+    );
+    let threw = false;
+    try { installSkill({ cwd: tmp, project: true }); } catch { threw = true; }
+    assert(threw, 'installSkill refuses to overwrite without force');
+    fs.writeFileSync(path.join(dest, 'SKILL.md'), 'stale');
+    installSkill({ cwd: tmp, project: true, force: true });
+    assert(
+      fs.readFileSync(path.join(dest, 'SKILL.md'), 'utf8').startsWith('---'),
+      'installSkill --force overwrites an existing installation'
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// ── install-skill targets other harnesses ─────────────────────────────────────
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linter-test-'));
+  try {
+    assert(
+      installSkill({ cwd: tmp, project: true, target: 'opencode' }).dest === path.join(tmp, '.opencode', 'skills', 'vibe-check'),
+      'target opencode installs into .opencode/skills'
+    );
+    assert(
+      installSkill({ cwd: tmp, project: true, target: 'copilot' }).dest === path.join(tmp, '.github', 'skills', 'vibe-check'),
+      'target copilot installs into .github/skills'
+    );
+    assert(
+      installSkill({ cwd: tmp, project: true, target: 'agents' }).dest === path.join(tmp, '.agents', 'skills', 'vibe-check'),
+      'target agents installs into the cross-client .agents/skills'
+    );
+    let threw = false;
+    try { installSkill({ cwd: tmp, project: true, target: 'emacs' }); } catch { threw = true; }
+    assert(threw, 'unknown target is rejected with the list of valid targets');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 console.log('');

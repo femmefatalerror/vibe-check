@@ -10,6 +10,7 @@ import {
   reportBatchSummary, reportSarif,
 } from './reporter';
 import { isGithubUrl, fetchGithubSkill, fetchGithubAgent } from './github';
+import { installSkill } from './install';
 import { VERSION } from './version';
 import type { Config, LintResult, FileType, WorkspaceDiagnosis } from './types';
 
@@ -407,8 +408,27 @@ program
     }
   });
 
+// ── install-skill: copy the bundled Claude skill into .claude/skills ─────────
+program
+  .command('install-skill')
+  .description('Install the vibe-check agent skill (lint → fix → verify workflow) for a coding harness')
+  .option('-t, --target <harness>', 'claude | opencode | copilot | agents (cross-client dir read by Copilot, Cursor, OpenCode, Codex, Gemini, Windsurf)', 'claude')
+  .option('-p, --project', "Install into the current project instead of the user-level skills dir")
+  .option('-f, --force', 'Overwrite an existing installation')
+  .action((opts) => {
+    try {
+      const { dest, files } = installSkill({ target: opts.target, project: opts.project, force: opts.force });
+      process.stdout.write(`Installed vibe-check skill to ${dest}\n`);
+      for (const f of files) process.stdout.write(`  ${f}\n`);
+      process.stdout.write(`\nAsk your agent to "vibe check my skills" to use it.\n`);
+    } catch (e) {
+      process.stderr.write(`Error: ${errMsg(e)}\n`);
+      process.exit(2);
+    }
+  });
+
 // `vibe-check <path>` without a subcommand routes to the auto command
-const KNOWN_COMMANDS = new Set(['auto', 'check', 'agent', 'diagnose', 'batch', 'help']);
+const KNOWN_COMMANDS = new Set(['auto', 'check', 'agent', 'diagnose', 'batch', 'install-skill', 'help']);
 const firstArg = process.argv[2];
 if (firstArg && !firstArg.startsWith('-') && !KNOWN_COMMANDS.has(firstArg)) {
   process.argv.splice(2, 0, 'auto');
