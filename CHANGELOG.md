@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-09
+
 ### Added
 - Cross-skill invocation transparency: a new `skill/routing/invokes-skill` info finding lists the skills a `SKILL.md` invokes by slash-command name (e.g. `` `/grilling` ``), so the dependency is visible even when the skill is linted on its own — it fires regardless of `disable-model-invocation`. System paths (`/tmp`), Claude Code built-ins (`/compact`), file paths, and fenced code are excluded
 - Workspace diagnosis resolves those invocations against discovered skills and reports **unresolved skill invocations** — a skill invoking a `/name` that no skill in the workspace provides (dangling reference), with a light score penalty
@@ -81,7 +83,8 @@ Initial release: linter and security scanner for Claude skills, agents, and AI
 workspaces — skill/agent lint rules, workspace diagnosis, injection scanning,
 GitHub URL analysis, SARIF output, and configurable rule suppression.
 
-[Unreleased]: https://github.com/femmefatalerror/vibe-check/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/femmefatalerror/vibe-check/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/femmefatalerror/vibe-check/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.1...v0.4.2
