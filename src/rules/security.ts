@@ -22,7 +22,7 @@ const SECRET_PATTERNS: Pattern[] = [
 ];
 
 const DANGEROUS_COMMANDS: Pattern[] = [
-  { pattern: /rm\s+-[rf]{1,2}\s+(\/[^/]|~|\*|\.\s*$)/, description: 'Recursive/root file deletion', ruleId: 'security/commands/rm-rf-root' },
+  { pattern: /rm\s+-[rf]{1,2}\s+(\/[^/]|\/\s*$|~|\*|\.\s*$)/, description: 'Recursive/root file deletion', ruleId: 'security/commands/rm-rf-root' },
   { pattern: /curl\s+[^\n|]+\|\s*(bash|sh|zsh|fish)\b/i, description: 'Remote code execution via curl|shell', ruleId: 'security/commands/curl-pipe-shell' },
   { pattern: /wget\s+[^\n|]+\|\s*(bash|sh|zsh)\b/i, description: 'Remote code execution via wget|shell', ruleId: 'security/commands/wget-pipe-shell' },
   { pattern: /:\s*\(\s*\)\s*\{.*:\|:&\s*\}/, description: 'Fork bomb pattern', ruleId: 'security/commands/fork-bomb' },
