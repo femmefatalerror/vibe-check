@@ -6,7 +6,7 @@ import { parseContent } from './parse';
 import { lintSkill } from './rules/skill';
 import { lintAgent } from './rules/agent';
 import { scanScriptContent, scanSecurity } from './rules/security';
-import { detectRoutingConflicts } from './rules/workspace';
+import { detectRoutingConflicts, extractSkillInvocations, checkUnresolvedInvocations } from './rules/workspace';
 import { lintFile, lintDir, lintParsed, lintSkillWithCompanions } from './linter';
 import { installSkill } from './install';
 import { discoverWorkspaceFiles } from './rules/workspace';
@@ -299,6 +299,59 @@ function assert(condition: boolean, label: string): void {
   const b = parseContent('/ws/skills/b/SKILL.md', '---\nname: pdf-parser\ndescription: Extracts text and tables from PDF documents. Use when processing PDF reports.\n---\n\n# B');
   const conflicts = detectRoutingConflicts([a, b]);
   assert(conflicts.length === 1, 'Detects overlapping skill descriptions as routing conflict');
+}
+
+// ── Cross-skill invocation: extraction ────────────────────────────────────────
+{
+  const parsed = parseContent('SKILL.md',
+    '---\nname: orchestrator\ndescription: Runs a session. Use when planning.\n---\n\n' +
+    'Run a `/grilling` session, using the `/domain-modeling` skill.\n' +
+    'Then optionally `/handoff`.\n');
+  const invs = extractSkillInvocations(parsed);
+  const names = invs.map(i => i.name);
+  assert(names.length === 3 && names.includes('grilling') && names.includes('domain-modeling') && names.includes('handoff'),
+    'extractSkillInvocations finds all three slash-command invocations');
+  assert(invs[0].line === 6, 'invocation line number points at the body line, not the frontmatter');
+}
+
+// ── Cross-skill invocation: paths, built-ins, and fences are not invocations ──
+{
+  const parsed = parseContent('SKILL.md',
+    '---\nname: t\ndescription: Test. Use when testing.\n---\n\n' +
+    'Write to `/tmp/out` then read `scripts/run.sh`. Use `/compact` at breaks.\n' +
+    'Save to <tmpdir>/architecture-review-<timestamp>.html for the report.\n' +
+    '```sh\n/grilling should be ignored inside a code fence\n```\n' +
+    'But `/real-skill` outside the fence counts.\n');
+  const names = extractSkillInvocations(parsed).map(i => i.name);
+  assert(names.length === 1 && names[0] === 'real-skill',
+    'system paths, file paths, built-ins, filename-with-hyphen, and fenced code are all excluded');
+}
+
+// ── Cross-skill invocation: single-file transparency finding ──────────────────
+{
+  // disable-model-invocation must NOT suppress the dependency finding
+  const parsed = parseContent('SKILL.md',
+    '---\nname: grill-with-docs\ndescription: A relentless interview.\ndisable-model-invocation: true\n---\n\n' +
+    'Run a `/grilling` session, using the `/domain-modeling` skill.\n');
+  const cats = lintSkill(parsed, new Set());
+  const routing = cats.find(c => c.id === 'routing')!;
+  const dep = routing.findings.find(f => f.ruleId === 'skill/routing/invokes-skill');
+  assert(!!dep && dep.severity === 'info', 'invokes-skill fires at info even for disable-model-invocation skills');
+  assert(!!dep && dep.message.includes('/grilling') && dep.message.includes('/domain-modeling'),
+    'the transparency finding lists the invoked skills');
+}
+
+// ── Cross-skill invocation: workspace resolution ──────────────────────────────
+{
+  const orch = parseContent('/ws/skills/orch/SKILL.md',
+    '---\nname: orch\ndescription: Orchestrates. Use when planning.\n---\n\nRun `/grilling`, then `/ghost-skill`.\n');
+  const grilling = parseContent('/ws/skills/grilling/SKILL.md',
+    '---\nname: grilling\ndescription: Grills a plan. Use when reviewing.\n---\n\n# Grilling');
+  const unresolved = checkUnresolvedInvocations([orch, grilling]);
+  assert(unresolved.length === 1 && unresolved[0].name === 'ghost-skill',
+    'a /invocation resolving to a real skill name is quiet; a dangling one is flagged');
+  assert(unresolved[0].source === '/ws/skills/orch/SKILL.md',
+    'the unresolved invocation is attributed to the invoking skill');
 }
 
 // ── Inline suppression ────────────────────────────────────────────────────────

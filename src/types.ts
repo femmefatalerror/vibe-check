@@ -60,6 +60,19 @@ export interface RoutingConflict {
   reason: string;
 }
 
+// A skill invoked by slash-command name, e.g. `/grilling`.
+export interface SkillInvocation {
+  name: string;
+  line: number;
+}
+
+// A cross-skill invocation that resolves to no known skill in the workspace.
+export interface UnresolvedInvocation {
+  source: string;
+  name: string;
+  line: number;
+}
+
 export interface InlineDisable {
   ruleId: string;
   line?: number; // set for lint-disable-next-line (the line the disable applies to)
@@ -73,6 +86,7 @@ export interface WorkspaceDiagnosis {
   tokenBudgetWarning: boolean;  // agent tokens > 8000
   brokenRefs: BrokenRef[];
   routingConflicts: RoutingConflict[];
+  unresolvedInvocations: UnresolvedInvocation[];
   workspaceScore: number;
   workspaceGrade: Grade;
   totalErrors: number;

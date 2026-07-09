@@ -167,6 +167,14 @@ export function reportWorkspaceTerminal(diag: WorkspaceDiagnosis): void {
     }
   }
 
+  if (diag.unresolvedInvocations.length > 0) {
+    console.log('');
+    console.log(pc.bold(pc.yellow('  Unresolved Skill Invocations')));
+    for (const u of diag.unresolvedInvocations) {
+      console.log(`  ${pc.yellow('⚠')} ${pc.dim(path.relative(diag.root, u.source))}:${u.line} → ${pc.bold('/' + u.name)} (no such skill in workspace)`);
+    }
+  }
+
   console.log('');
   console.log(pc.bold('  Files'));
   console.log(pc.dim('  ' + 'Grade Score Type   Issues  Path'));
@@ -189,7 +197,7 @@ export function reportWorkspaceTerminal(diag: WorkspaceDiagnosis): void {
   }
 
   console.log('');
-  const crossFileIssues = diag.routingConflicts.length + diag.brokenRefs.length;
+  const crossFileIssues = diag.routingConflicts.length + diag.brokenRefs.length + diag.unresolvedInvocations.length;
   // cross-file issues cap the verdict below "immaculate"
   const verdictScore = crossFileIssues > 0 ? Math.min(diag.workspaceScore, 94) : diag.workspaceScore;
   console.log(vibeVerdict(verdictScore, diag.totalErrors));
@@ -294,6 +302,14 @@ export function reportWorkspaceMarkdown(diag: WorkspaceDiagnosis): string {
     lines.push('## Routing Conflicts', '');
     for (const c of diag.routingConflicts) {
       lines.push(`- \`${c.skillA}\` ↔ \`${c.skillB}\` — ${c.reason}`);
+    }
+    lines.push('');
+  }
+
+  if (diag.unresolvedInvocations.length > 0) {
+    lines.push('## Unresolved Skill Invocations', '');
+    for (const u of diag.unresolvedInvocations) {
+      lines.push(`- \`${u.source}\` line ${u.line} invokes \`/${u.name}\` — no such skill in workspace`);
     }
     lines.push('');
   }

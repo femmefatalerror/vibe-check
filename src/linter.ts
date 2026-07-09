@@ -5,7 +5,7 @@ import { analyzeTokens } from './tokens';
 import { lintSkill } from './rules/skill';
 import { lintAgent } from './rules/agent';
 import { scanScriptContent, scanSecurity } from './rules/security';
-import { checkBrokenRefs, detectRoutingConflicts, discoverWorkspaceFiles, DOC_FILENAMES } from './rules/workspace';
+import { checkBrokenRefs, checkUnresolvedInvocations, detectRoutingConflicts, discoverWorkspaceFiles, DOC_FILENAMES } from './rules/workspace';
 import { scoreCategory, computeWeightedScore } from './score';
 import type { Config, LintResult, WorkspaceDiagnosis, FileType, Grade, CategoryResult, Finding, ParsedFile } from './types';
 
@@ -272,6 +272,7 @@ export function diagnoseWorkspace(root: string, config: Config = {}): WorkspaceD
   const brokenRefs = checkBrokenRefs(parsedFiles);
   const skillParsed = parsedFiles.filter((_, i) => discovered[i].type === 'skill');
   const routingConflicts = detectRoutingConflicts(skillParsed);
+  const unresolvedInvocations = checkUnresolvedInvocations(skillParsed);
 
   const allFindings = results.flatMap(r => r.categories.flatMap(c => c.findings));
   const totalErrors = allFindings.filter(f => f.severity === 'error').length;
@@ -283,7 +284,8 @@ export function diagnoseWorkspace(root: string, config: Config = {}): WorkspaceD
   const avgScore = results.reduce((s, r) => s + r.score, 0) / results.length;
   const brokenRefPenalty = Math.min(brokenRefs.length * 5, 20);
   const routingPenalty = Math.min(routingConflicts.length * 5, 15);
-  const workspaceScore = Math.max(0, avgScore - brokenRefPenalty - routingPenalty);
+  const invocationPenalty = Math.min(unresolvedInvocations.length * 3, 12);
+  const workspaceScore = Math.max(0, avgScore - brokenRefPenalty - routingPenalty - invocationPenalty);
 
   return {
     root,
@@ -293,6 +295,7 @@ export function diagnoseWorkspace(root: string, config: Config = {}): WorkspaceD
     tokenBudgetWarning: agentTokens > 8000,
     brokenRefs,
     routingConflicts,
+    unresolvedInvocations,
     workspaceScore,
     workspaceGrade: toGrade(workspaceScore),
     totalErrors,

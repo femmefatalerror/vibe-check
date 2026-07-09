@@ -1,5 +1,6 @@
 import type { Finding, ParsedFile, CategoryResult } from '../types';
 import { scanSecurity } from './security';
+import { extractSkillInvocations } from './workspace';
 import { scoreCategory } from '../score';
 import { analyzeTokens, findDuplicateLines } from '../tokens';
 
@@ -208,6 +209,23 @@ function routingRules(parsed: ParsedFile): Finding[] {
   }
 
   return findings;
+}
+
+// Cross-skill invocations: surface the skills this one delegates to, so the
+// dependency is visible even when the skill is linted on its own. Runs
+// regardless of disable-model-invocation (orchestrator skills are user-invoked).
+function dependencyRules(parsed: ParsedFile): Finding[] {
+  const invocations = extractSkillInvocations(parsed);
+  if (invocations.length === 0) return [];
+
+  const names = invocations.map(i => `/${i.name}`);
+  return [{
+    ruleId: 'skill/routing/invokes-skill',
+    severity: 'info',
+    message: `Invokes ${names.length} other skill(s): ${names.join(', ')} — not analyzed together with this skill`,
+    line: invocations[0].line,
+    suggestion: 'Lint the invoked skills too, or run `vibe-check diagnose` on the workspace so the whole chain is checked',
+  }];
 }
 
 // ── Category 3: Structure (15%) ──────────────────────────────────────────────
@@ -466,7 +484,7 @@ export function lintSkill(parsed: ParsedFile, suppress: Set<string>): CategoryRe
 
   const defs: Array<{ id: string; name: string; weight: number; findings: Finding[] }> = [
     { id: 'metadata',    name: 'Identity & Metadata',  weight: 0.20, findings: filter(metadataRules(parsed)) },
-    { id: 'routing',     name: 'Routing & Discovery',  weight: 0.15, findings: filter(routingRules(parsed)) },
+    { id: 'routing',     name: 'Routing & Discovery',  weight: 0.15, findings: filter([...routingRules(parsed), ...dependencyRules(parsed)]) },
     { id: 'structure',   name: 'Structure',             weight: 0.15, findings: filter(structureRules(parsed)) },
     { id: 'content',     name: 'Content Quality',       weight: 0.15, findings: filter(contentRules(parsed)) },
     { id: 'robustness',  name: 'Robustness',            weight: 0.10, findings: filter(robustnessRules(parsed)) },

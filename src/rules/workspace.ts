@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BrokenRef, ParsedFile, RoutingConflict } from '../types';
+import type { BrokenRef, ParsedFile, RoutingConflict, SkillInvocation, UnresolvedInvocation } from '../types';
 
 export interface DiscoveredFile {
   path: string;
@@ -155,6 +155,81 @@ export function detectRoutingConflicts(skillFiles: ParsedFile[]): RoutingConflic
   }
 
   return conflicts;
+}
+
+// A skill can invoke another skill by its slash-command name, e.g. `/grilling`.
+// These are cross-skill dependencies (resolved by skill name), not file links.
+// Root/system paths that share the /word shape but are never skill invocations.
+const SYSTEM_PATHS = new Set([
+  'tmp', 'usr', 'etc', 'bin', 'dev', 'var', 'opt', 'root', 'home', 'sys',
+  'proc', 'mnt', 'lib', 'sbin', 'srv', 'boot', 'run', 'media', 'users',
+  'private', 'net', 'cores',
+]);
+
+// Claude Code built-in slash commands — legitimately invoked from skill docs
+// but not skills, so they must not be reported as skill dependencies.
+const BUILTIN_COMMANDS = new Set([
+  'compact', 'clear', 'help', 'review', 'init', 'config', 'cost', 'doctor',
+  'login', 'logout', 'model', 'resume', 'status', 'vim', 'memory', 'agents',
+  'bug', 'mcp', 'permissions', 'add-dir', 'pr-comments', 'release-notes',
+  'terminal-setup', 'context', 'rewind', 'usage', 'hooks', 'output-style',
+  'ide', 'fast', 'exit', 'quit', 'feedback',
+]);
+
+// A slash-command token: `/name` where name is skill-name-shaped (no leading or
+// trailing hyphen, 2–64 chars), preceded by a boundary (start, whitespace,
+// backtick, or paren) and not continued by a path separator, dot, hyphen, or
+// word char — so `scripts/x`, `/tmp/y`, `/a.json`, `<t>/foo-<x>`, and `http://`
+// don't match.
+const INVOCATION_RE = /(?:^|[\s`(])\/([a-z][a-z0-9-]{0,62}[a-z0-9])(?![/.\w-])/g;
+
+// Extract the distinct skills a SKILL.md invokes by slash-command name. Skips
+// fenced code blocks (shell examples there tend to be paths, not invocations)
+// and known system paths.
+export function extractSkillInvocations(parsed: ParsedFile): SkillInvocation[] {
+  const out: SkillInvocation[] = [];
+  const seen = new Set<string>();
+  let inFence = false;
+
+  parsed.bodyLines.forEach((line, i) => {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      inFence = !inFence;
+      return;
+    }
+    if (inFence) return;
+
+    INVOCATION_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = INVOCATION_RE.exec(line)) !== null) {
+      const name = m[1];
+      if (SYSTEM_PATHS.has(name) || BUILTIN_COMMANDS.has(name) || seen.has(name)) continue;
+      seen.add(name);
+      out.push({ name, line: parsed.bodyLineOffset + i + 1 });
+    }
+  });
+
+  return out;
+}
+
+// Cross-skill invocations that don't resolve to any skill name in the workspace
+// — either a dangling reference (renamed/removed skill) or a non-skill token.
+export function checkUnresolvedInvocations(skillFiles: ParsedFile[]): UnresolvedInvocation[] {
+  const known = new Set(
+    skillFiles
+      .map(f => String(f.frontmatter?.['name'] ?? '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  const unresolved: UnresolvedInvocation[] = [];
+  for (const file of skillFiles) {
+    for (const inv of extractSkillInvocations(file)) {
+      if (!known.has(inv.name.toLowerCase())) {
+        unresolved.push({ source: file.path, name: inv.name, line: inv.line });
+      }
+    }
+  }
+  return unresolved;
 }
 
 export function checkBrokenRefs(files: ParsedFile[]): BrokenRef[] {

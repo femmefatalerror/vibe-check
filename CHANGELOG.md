@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Cross-skill invocation transparency: a new `skill/routing/invokes-skill` info finding lists the skills a `SKILL.md` invokes by slash-command name (e.g. `` `/grilling` ``), so the dependency is visible even when the skill is linted on its own — it fires regardless of `disable-model-invocation`. System paths (`/tmp`), Claude Code built-ins (`/compact`), file paths, and fenced code are excluded
+- Workspace diagnosis resolves those invocations against discovered skills and reports **unresolved skill invocations** — a skill invoking a `/name` that no skill in the workspace provides (dangling reference), with a light score penalty
+
 ### Fixed
 - `security/commands/rm-rf-root` now flags bare `rm -rf /` (root with no trailing path), not just `rm -rf /<path>`
 
