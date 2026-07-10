@@ -1,5 +1,5 @@
 export type Severity = 'error' | 'warn' | 'info';
-export type FileType = 'skill' | 'agent' | 'unknown';
+export type FileType = 'skill' | 'agent' | 'config' | 'unknown';
 export type Grade = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D+' | 'D' | 'D-' | 'F';
 
 export interface Finding {

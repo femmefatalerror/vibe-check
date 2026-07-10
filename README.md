@@ -2,7 +2,7 @@
 
 > You vibe-coded your agents. Time for a vibe check.
 
-A linter and security scanner for Claude skills, agents, and AI workspaces. Checks SKILL.md files, agent instruction files (CLAUDE.md, AGENTS.md, rules), and entire agent workspaces against Anthropic's documented best practices — including prompt-injection payloads, hidden-unicode smuggling, leaked secrets, and token bloat.
+A linter and security scanner for Claude skills, agents, and AI workspaces. Checks SKILL.md files, agent instruction files (CLAUDE.md, AGENTS.md, rules), harness config files (MCP servers, hooks, permissions — Claude Code, OpenCode, Copilot), and entire agent workspaces against Anthropic's documented best practices — including prompt-injection payloads, hidden-unicode smuggling, leaked secrets, and token bloat.
 
 ```
 $ vibe-check .
@@ -41,6 +41,7 @@ Just point it at something — `vibe-check <path>` figures out what it's looking
 ```bash
 vibe-check skills/my-skill/    # skill directory → skill lint (+ companion scripts)
 vibe-check CLAUDE.md           # agent file → agent lint
+vibe-check .mcp.json           # harness config → MCP/hooks/permissions scan
 vibe-check .                   # plain directory → full workspace diagnosis
 vibe-check https://github.com/owner/repo/tree/main/skills/my-skill
 ```

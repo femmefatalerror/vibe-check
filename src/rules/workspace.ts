@@ -1,10 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { CONFIG_FILE_CANDIDATES } from './config';
 import type { BrokenRef, ParsedFile, RoutingConflict, SkillInvocation, UnresolvedInvocation } from '../types';
 
 export interface DiscoveredFile {
   path: string;
-  type: 'skill' | 'agent';
+  type: 'skill' | 'agent' | 'config';
 }
 
 // Repo-metadata files that are never skills, even inside a skills/ directory
@@ -37,7 +38,7 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
   const seen = new Set<string>();
   const absRoot = path.resolve(root);
 
-  function add(filePath: string, type: 'skill' | 'agent') {
+  function add(filePath: string, type: 'skill' | 'agent' | 'config') {
     const abs = path.resolve(filePath);
     if (!seen.has(abs) && fs.existsSync(abs)) {
       seen.add(abs);
@@ -105,6 +106,12 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
   // Always include CLAUDE.md at root even if walk missed it
   for (const candidate of [path.join(root, 'CLAUDE.md'), path.join(root, '.claude', 'CLAUDE.md')]) {
     add(candidate, 'agent');
+  }
+
+  // Harness config files live at fixed paths (some in dot-dirs the walk
+  // skips), so probe them directly instead of discovering by extension
+  for (const rel of CONFIG_FILE_CANDIDATES) {
+    add(path.join(absRoot, rel), 'config');
   }
 
   return discovered;

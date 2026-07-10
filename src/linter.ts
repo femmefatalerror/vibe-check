@@ -5,6 +5,7 @@ import { analyzeTokens } from './tokens';
 import { lintSkill } from './rules/skill';
 import { lintAgent } from './rules/agent';
 import { scanScriptContent, scanSecurity } from './rules/security';
+import { isConfigFile, lintConfigContent } from './rules/config';
 import { checkBrokenRefs, checkUnresolvedInvocations, detectRoutingConflicts, discoverWorkspaceFiles, DOC_FILENAMES } from './rules/workspace';
 import { scoreCategory, computeWeightedScore } from './score';
 import type { Config, LintResult, WorkspaceDiagnosis, FileType, Grade, CategoryResult, Finding, ParsedFile } from './types';
@@ -199,7 +200,37 @@ function attachCompanionFindings(result: LintResult, skillDir: string, config: C
 }
 
 export function lintFile(filePath: string, config: Config = {}, forcedType?: FileType): LintResult {
+  // Harness config files (settings.json, .mcp.json, opencode.json, ...) are
+  // JSON, not markdown — they get their own scan regardless of forced type
+  if (isConfigFile(filePath)) return lintConfigFile(filePath, config);
   return lintParsed(parseFile(filePath), config, forcedType);
+}
+
+export function lintConfigFile(filePath: string, config: Config = {}): LintResult {
+  const raw = fs.readFileSync(filePath, 'utf-8');
+  const suppress = new Set(config.suppress ?? []);
+  const overrides = config.severity ?? {};
+
+  const categories = lintConfigContent(filePath, raw);
+  for (const cat of categories) {
+    cat.findings = cat.findings.filter(f => !suppress.has(f.ruleId));
+    rescoreCategory(cat);
+  }
+  if (Object.keys(overrides).length > 0) {
+    applySeverityOverrides(categories, overrides);
+  }
+
+  const score = finalScore(categories);
+
+  return {
+    file: filePath,
+    type: 'config',
+    categories,
+    score,
+    grade: toGrade(score),
+    tokens: analyzeTokens(raw),
+    suppressed: suppress.size,
+  };
 }
 
 // Lint an already-parsed file — lets callers that need the ParsedFile for other
@@ -266,24 +297,32 @@ export function diagnoseWorkspace(root: string, config: Config = {}): WorkspaceD
     throw new Error(`No skills or agent files (SKILL.md, CLAUDE.md, AGENT.md, AGENTS.md) found in ${root}`);
   }
 
-  const parsedFiles = discovered.map(d => parseFile(d.path));
+  // Config files are JSON — no markdown parse, and no part in the cross-file
+  // checks (broken refs, routing, invocations) below
+  const parsedFiles = discovered.map(d => d.type === 'config' ? null : parseFile(d.path));
   const results = discovered.map((d, i) => {
-    const result = lintParsed(parsedFiles[i], config, d.type);
+    const parsed = parsedFiles[i];
+    if (parsed === null) return lintConfigFile(d.path, config);
+    const result = lintParsed(parsed, config, d.type);
     // Companions only make sense for a dedicated skill directory — flat-layout
     // skills (skills/foo.md) share their directory with sibling skills
     if (d.type === 'skill' && path.basename(d.path).toUpperCase() === 'SKILL.MD') {
-      attachCompanionFindings(result, path.dirname(d.path), config, parsedFiles[i].raw);
+      attachCompanionFindings(result, path.dirname(d.path), config, parsed.raw);
     }
     return result;
   });
 
-  const totalTokens = results.reduce((s, r) => s + r.tokens.total, 0);
+  // Config JSON never enters the model's context, so it stays out of the budget
+  const totalTokens = results.filter(r => r.type !== 'config').reduce((s, r) => s + r.tokens.total, 0);
   const agentTokens = results
     .filter(r => r.type === 'agent')
     .reduce((s, r) => s + r.tokens.total, 0);
 
-  const brokenRefs = checkBrokenRefs(parsedFiles);
-  const skillParsed = parsedFiles.filter((_, i) => discovered[i].type === 'skill');
+  const mdParsed = parsedFiles.filter((p): p is ParsedFile => p !== null);
+  const brokenRefs = checkBrokenRefs(mdParsed);
+  const skillParsed = parsedFiles.filter(
+    (p, i): p is ParsedFile => p !== null && discovered[i].type === 'skill'
+  );
   const routingConflicts = detectRoutingConflicts(skillParsed);
   const unresolvedInvocations = checkUnresolvedInvocations(skillParsed);
 

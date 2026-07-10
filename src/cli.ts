@@ -254,7 +254,7 @@ program
 // ── check: lint a skill file, directory, or GitHub URL ────────────────────────
 program
   .command('check <path>')
-  .description('Lint a SKILL.md file, directory, or GitHub URL (github.com/owner/repo/tree/branch/path)')
+  .description('Lint a SKILL.md file, directory, harness config file (.mcp.json, settings.json, opencode.json), or GitHub URL (github.com/owner/repo/tree/branch/path)')
   .option('-j, --json', 'JSON output')
   .option('-m, --markdown', 'Markdown output')
   .option('-s, --sarif', 'SARIF output (GitHub code scanning)')

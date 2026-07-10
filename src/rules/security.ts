@@ -1,12 +1,12 @@
 import type { Finding, ParsedFile } from '../types';
 
-interface Pattern {
+export interface Pattern {
   pattern: RegExp;
   description: string;
   ruleId: string;
 }
 
-const SECRET_PATTERNS: Pattern[] = [
+export const SECRET_PATTERNS: Pattern[] = [
   { pattern: /sk-[a-zA-Z0-9]{48}/, description: 'OpenAI API key', ruleId: 'security/secrets/openai-key' },
   { pattern: /sk-ant-api\d{2}-[A-Za-z0-9\-_]{80,}/, description: 'Anthropic API key', ruleId: 'security/secrets/anthropic-key' },
   { pattern: /AIza[0-9A-Za-z\-_]{35}/, description: 'Google API key', ruleId: 'security/secrets/google-key' },
@@ -21,7 +21,7 @@ const SECRET_PATTERNS: Pattern[] = [
   { pattern: /api[_-]?key\s*[:=]\s*["'][^"'<>\s]{8,}["']/, description: 'Hardcoded API key', ruleId: 'security/secrets/hardcoded-api-key' },
 ];
 
-const DANGEROUS_COMMANDS: Pattern[] = [
+export const DANGEROUS_COMMANDS: Pattern[] = [
   { pattern: /rm\s+-[rf]{1,2}\s+(\/[^/]|\/\s*$|~|\*|\.\s*$)/, description: 'Recursive/root file deletion', ruleId: 'security/commands/rm-rf-root' },
   { pattern: /curl\s+[^\n|]+\|\s*(bash|sh|zsh|fish)\b/i, description: 'Remote code execution via curl|shell', ruleId: 'security/commands/curl-pipe-shell' },
   { pattern: /wget\s+[^\n|]+\|\s*(bash|sh|zsh)\b/i, description: 'Remote code execution via wget|shell', ruleId: 'security/commands/wget-pipe-shell' },
@@ -33,7 +33,7 @@ const DANGEROUS_COMMANDS: Pattern[] = [
   { pattern: /eval\s+\$\(curl|eval\s+\$\(wget/, description: 'Remote code execution via eval', ruleId: 'security/commands/eval-remote' },
 ];
 
-const SENSITIVE_PATHS: Pattern[] = [
+export const SENSITIVE_PATHS: Pattern[] = [
   { pattern: /~\/\.ssh\/(?!config(?:\.example)?)/, description: 'SSH key directory', ruleId: 'security/paths/ssh-keys' },
   { pattern: /\/etc\/shadow\b/, description: 'Shadow password file', ruleId: 'security/paths/etc-shadow' },
   { pattern: /\/etc\/passwd\b/, description: 'Password file', ruleId: 'security/paths/etc-passwd' },
@@ -43,7 +43,7 @@ const SENSITIVE_PATHS: Pattern[] = [
   { pattern: /~\/\.netrc\b/, description: '.netrc credentials file', ruleId: 'security/paths/netrc' },
 ];
 
-const EXFILTRATION_PATTERNS: Pattern[] = [
+export const EXFILTRATION_PATTERNS: Pattern[] = [
   {
     pattern: /curl\s+[^\n]*-[dX]\s*POST[^\n]*(https?:\/\/(?!localhost|127\.|0\.0\.0\.0)[a-zA-Z0-9.-]+)/i,
     description: 'POST request to external server (possible exfiltration)',
@@ -81,7 +81,7 @@ const BASE64_BLOB_RE = /[A-Za-z0-9+/]{80,}={0,2}/;
 // Placeholder markers exempt a secret finding only when they appear inside the
 // matched text itself. A marker elsewhere on the line is attacker-controlled
 // camouflage (`AKIA... # placeholder`) and must not suppress detection.
-const PLACEHOLDER_RE = /YOUR_[A-Z_]+|<[A-Z_]+>|example\.com|placeholder|changeme/i;
+export const PLACEHOLDER_RE = /YOUR_[A-Z_]+|<[A-Z_]+>|example\.com|placeholder|changeme/i;
 
 function scanInjection(parsed: ParsedFile, type: 'skill' | 'agent'): Finding[] {
   const findings: Finding[] = [];

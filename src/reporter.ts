@@ -131,8 +131,10 @@ export function reportWorkspaceTerminal(diag: WorkspaceDiagnosis): void {
 
   const skillCount = diag.files.filter(f => f.type === 'skill').length;
   const agentCount = diag.files.filter(f => f.type === 'agent').length;
+  const configCount = diag.files.filter(f => f.type === 'config').length;
 
-  console.log(`  ${pc.bold('Files')}       ${diag.files.length}  (${skillCount} skills, ${agentCount} agents)`);
+  const configStr = configCount > 0 ? `, ${configCount} configs` : '';
+  console.log(`  ${pc.bold('Files')}       ${diag.files.length}  (${skillCount} skills, ${agentCount} agents${configStr})`);
 
   const tokenStr = `~${diag.totalTokens} total  (agents ~${diag.agentTokens} always loaded)`;
   const tokenDisplay = diag.tokenBudgetWarning
@@ -281,7 +283,7 @@ export function reportWorkspaceMarkdown(diag: WorkspaceDiagnosis): string {
     '',
     `| Metric | Value |`,
     `|--------|-------|`,
-    `| Files | ${diag.files.length} (${diag.files.filter(f => f.type === 'skill').length} skills, ${diag.files.filter(f => f.type === 'agent').length} agents) |`,
+    `| Files | ${diag.files.length} (${diag.files.filter(f => f.type === 'skill').length} skills, ${diag.files.filter(f => f.type === 'agent').length} agents${diag.files.some(f => f.type === 'config') ? `, ${diag.files.filter(f => f.type === 'config').length} configs` : ''}) |`,
     `| Total tokens | ~${diag.totalTokens} |`,
     `| Agent tokens (always loaded) | ~${diag.agentTokens}${diag.tokenBudgetWarning ? ' ⚠️ **over budget**' : ''} |`,
     `| Errors | ${diag.totalErrors} |`,
