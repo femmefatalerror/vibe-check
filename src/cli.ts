@@ -54,6 +54,14 @@ function write(content: string, file?: string): void {
   }
 }
 
+// process.exit() drops stdout still buffered in a pipe — large --json reports
+// get truncated mid-stream. Queue the exit behind the last stdout write so the
+// report flushes first. An explicit exit is only needed after GitHub fetches,
+// where fetch's keep-alive sockets would otherwise hold the process open.
+function flushAndExit(): void {
+  process.stdout.write('', () => process.exit());
+}
+
 function emitResults(
   results: LintResult[],
   fmt: 'json' | 'markdown' | 'sarif' | 'terminal',
@@ -239,7 +247,7 @@ program
     } finally {
       // clean up before exiting — process.exit() inside the try would skip this block
       if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
-      process.exit();
+      flushAndExit();
     }
   });
 
@@ -297,7 +305,7 @@ program
     } finally {
       // clean up before exiting — process.exit() inside the try would skip this block
       if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
-      process.exit();
+      flushAndExit();
     }
   });
 
@@ -341,7 +349,7 @@ program
     } finally {
       // clean up before exiting — process.exit() inside the try would skip this block
       if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
-      process.exit();
+      flushAndExit();
     }
   });
 
@@ -366,10 +374,10 @@ program
       const minScore = parseMinScore(opts.minScore);
       const diagnosis = diagnoseWorkspace(root, cfg);
       emitWorkspace(diagnosis, fmt, opts);
-      process.exit(workspaceExitCode(diagnosis, minScore));
+      process.exitCode = workspaceExitCode(diagnosis, minScore);
     } catch (e) {
       process.stderr.write(`Error: ${errMsg(e)}\n`);
-      process.exit(2);
+      process.exitCode = 2;
     }
   });
 
@@ -394,17 +402,18 @@ program
       const files = resolveGlob(pattern);
       if (files.length === 0) {
         process.stderr.write(`No files found matching: ${pattern}\n`);
-        process.exit(2);
+        process.exitCode = 2;
+        return;
       }
 
       const results = files.map(f => lintFile(f, cfg, opts.type as FileType | undefined));
 
       emitResults(results, fmt, opts, { arrayJson: true, batchSummary: true });
 
-      process.exit(hasErrors(results) || failsMinScore(results, minScore) ? 1 : 0);
+      process.exitCode = hasErrors(results) || failsMinScore(results, minScore) ? 1 : 0;
     } catch (e) {
       process.stderr.write(`Error: ${errMsg(e)}\n`);
-      process.exit(2);
+      process.exitCode = 2;
     }
   });
 
@@ -423,7 +432,7 @@ program
       process.stdout.write(`\nAsk your agent to "vibe check my skills" to use it.\n`);
     } catch (e) {
       process.stderr.write(`Error: ${errMsg(e)}\n`);
-      process.exit(2);
+      process.exitCode = 2;
     }
   });
 

@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-07-09
+### Changed
+- Any `security/*` error now caps the score at 59 (Grade F), for the skill itself and for findings surfaced from companion files. Previously the weighted average let a skill with e.g. a live credential still score an A while the verdict said it failed
+
+### Fixed
+- Frontmatter that parses to a scalar or list (e.g. `---` around a plain sentence) is reported as `skill/meta/invalid-yaml` instead of crashing the linter — previously one such file aborted an entire `diagnose`/`batch` run with a `TypeError`
+- Workspace discovery no longer misclassifies companion markdown in subdirectories below a `SKILL.md` (`references/`, `examples/`, …) as standalone flat-layout skills; the check now looks at ancestor directories, not just siblings
+- Large `--json`/`--sarif` reports piped to a slow consumer (e.g. `| jq`) are no longer truncated: sync commands exit naturally via `process.exitCode`, and commands that fetch from GitHub flush stdout before exiting
+- An invalid severity value in a config file (anything other than `error`, `warn`, `info`) no longer poisons the score to `NaN`; it is dropped with a warning, and the scorer treats unknown severities as errors as a last resort
 
 ### Added
 - Cross-skill invocation transparency: a new `skill/routing/invokes-skill` info finding lists the skills a `SKILL.md` invokes by slash-command name (e.g. `` `/grilling` ``), so the dependency is visible even when the skill is linted on its own — it fires regardless of `disable-model-invocation`. System paths (`/tmp`), Claude Code built-ins (`/compact`), file paths, and fenced code are excluded

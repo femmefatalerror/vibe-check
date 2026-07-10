@@ -45,7 +45,9 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
     }
   }
 
-  function walk(dir: string) {
+  // underSkillDir: some ancestor directory contains a SKILL.md, so loose .md
+  // files here are companions (references/, examples/, …), not flat-layout skills
+  function walk(dir: string, underSkillDir = false) {
     if (!fs.existsSync(dir)) return;
     let entries: fs.Dirent[];
     try {
@@ -64,7 +66,8 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
     // only inside a harness dot-dir, so a repo's own agents/ docs dir stays out
     const inAgentDir = (segments.includes('agent') || segments.includes('agents'))
       && segments.some(s => SOURCE_DOT_DIRS.has(s));
-    const hasSiblingSkill = entries.some(e => e.isFile() && e.name.toUpperCase() === 'SKILL.MD');
+    const inSkillTree = underSkillDir ||
+      entries.some(e => e.isFile() && e.name.toUpperCase() === 'SKILL.MD');
 
     for (const e of entries) {
       if (e.name === 'node_modules' || e.name === '.git' || e.name === 'dist' || e.name === 'apm_modules') continue;
@@ -74,7 +77,7 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
 
       if (e.isDirectory()) {
         if (isApmDeployedCopy(dir, e.name)) continue;
-        walk(fullPath);
+        walk(fullPath, inSkillTree);
       } else if (e.name.endsWith('.md')) {
         const upper = e.name.toUpperCase();
 
@@ -88,8 +91,8 @@ export function discoverWorkspaceFiles(root: string): DiscoveredFile[] {
           add(fullPath, 'agent');
         } else if (inSkillsDir) {
           // Loose .md in a skills tree is a flat-layout skill — but not repo
-          // docs, and not companion references living next to a SKILL.md
-          if (!DOC_FILENAMES.has(upper) && !hasSiblingSkill) add(fullPath, 'skill');
+          // docs, and not companion references living next to or below a SKILL.md
+          if (!DOC_FILENAMES.has(upper) && !inSkillTree) add(fullPath, 'skill');
         } else if ((inRulesDir || inAgentDir) && !DOC_FILENAMES.has(upper)) {
           add(fullPath, 'agent');
         }

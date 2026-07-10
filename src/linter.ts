@@ -9,6 +9,19 @@ import { checkBrokenRefs, checkUnresolvedInvocations, detectRoutingConflicts, di
 import { scoreCategory, computeWeightedScore } from './score';
 import type { Config, LintResult, WorkspaceDiagnosis, FileType, Grade, CategoryResult, Finding, ParsedFile } from './types';
 
+// A single security error means the artifact is unsafe to use as-is. The
+// weighted average alone lets breadth of clean categories mask that (a skill
+// with a live credential can still average an A), so cap to a failing grade.
+const SECURITY_ERROR_SCORE_CAP = 59;
+
+function finalScore(categories: CategoryResult[]): number {
+  const score = computeWeightedScore(categories);
+  const hasSecurityError = categories.some(c =>
+    c.findings.some(f => f.severity === 'error' && f.ruleId.startsWith('security/'))
+  );
+  return hasSecurityError ? Math.min(score, SECURITY_ERROR_SCORE_CAP) : score;
+}
+
 export function toGrade(score: number): Grade {
   if (score >= 97) return 'A+';
   if (score >= 93) return 'A';
@@ -181,7 +194,7 @@ function attachCompanionFindings(result: LintResult, skillDir: string, config: C
   }
 
   rescoreCategory(security);
-  result.score = computeWeightedScore(result.categories);
+  result.score = finalScore(result.categories);
   result.grade = toGrade(result.score);
 }
 
@@ -210,7 +223,7 @@ export function lintParsed(parsed: ParsedFile, config: Config = {}, forcedType?:
     applySeverityOverrides(categories, overrides);
   }
 
-  const score = computeWeightedScore(categories);
+  const score = finalScore(categories);
 
   return {
     file: filePath,
@@ -316,7 +329,7 @@ export function loadConfig(configPath?: string): Config {
   for (const p of candidates) {
     if (fs.existsSync(p)) {
       try {
-        return JSON.parse(fs.readFileSync(p, 'utf-8')) as Config;
+        return sanitizeConfig(JSON.parse(fs.readFileSync(p, 'utf-8')) as Config, p);
       } catch {
         process.stderr.write(`Warning: could not parse config file ${p}\n`);
       }
@@ -324,4 +337,22 @@ export function loadConfig(configPath?: string): Config {
   }
 
   return {};
+}
+
+const VALID_SEVERITIES = new Set(['error', 'warn', 'info']);
+
+// An unknown severity override would flow into the score math as an undefined
+// deduction and turn the score into NaN — drop it loudly instead
+function sanitizeConfig(config: Config, source: string): Config {
+  if (config.severity) {
+    for (const [ruleId, severity] of Object.entries(config.severity)) {
+      if (!VALID_SEVERITIES.has(severity)) {
+        process.stderr.write(
+          `Warning: ignoring invalid severity "${severity}" for ${ruleId} in ${source} (expected error, warn, or info)\n`
+        );
+        delete config.severity[ruleId];
+      }
+    }
+  }
+  return config;
 }

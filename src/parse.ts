@@ -21,7 +21,14 @@ export function parseContent(filePath: string, raw: string): ParsedFile {
     if (closeIdx !== -1) {
       const fmText = allLines.slice(1, closeIdx).join('\n');
       try {
-        frontmatter = (yaml.load(fmText) ?? null) as Record<string, unknown> | null;
+        const loaded = yaml.load(fmText) ?? null;
+        // yaml.load happily returns scalars and arrays; downstream code does
+        // `'name' in frontmatter`, so anything but a mapping must be rejected here
+        if (loaded !== null && (typeof loaded !== 'object' || Array.isArray(loaded))) {
+          frontmatterError = `frontmatter must be a YAML mapping of key: value pairs, got ${Array.isArray(loaded) ? 'a list' : `a ${typeof loaded}`}`;
+        } else {
+          frontmatter = loaded as Record<string, unknown> | null;
+        }
       } catch (e) {
         frontmatterError = String(e);
       }

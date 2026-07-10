@@ -8,7 +8,9 @@ const DEDUCTIONS: Record<Finding['severity'], number> = {
 
 // 0-10 per category: start at 10, deduct per finding by severity
 export function scoreCategory(findings: Finding[]): number {
-  const total = findings.reduce((sum, f) => sum + DEDUCTIONS[f.severity], 0);
+  // `?? 3` guards against an invalid severity smuggled in via a programmatic
+  // Config — an unknown severity must not NaN the score, so treat it as error
+  const total = findings.reduce((sum, f) => sum + (DEDUCTIONS[f.severity] ?? 3), 0);
   return Math.max(0, 10 - total);
 }
 
