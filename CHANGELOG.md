@@ -5,16 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Changed
-- Any `security/*` error now caps the score at 59 (Grade F), for the skill itself and for findings surfaced from companion files. Previously the weighted average let a skill with e.g. a live credential still score an A while the verdict said it failed
-
-### Fixed
-- Frontmatter that parses to a scalar or list (e.g. `---` around a plain sentence) is reported as `skill/meta/invalid-yaml` instead of crashing the linter — previously one such file aborted an entire `diagnose`/`batch` run with a `TypeError`
-- Workspace discovery no longer misclassifies companion markdown in subdirectories below a `SKILL.md` (`references/`, `examples/`, …) as standalone flat-layout skills; the check now looks at ancestor directories, not just siblings
-- Large `--json`/`--sarif` reports piped to a slow consumer (e.g. `| jq`) are no longer truncated: sync commands exit naturally via `process.exitCode`, and commands that fetch from GitHub flush stdout before exiting
-- An invalid severity value in a config file (anything other than `error`, `warn`, `info`) no longer poisons the score to `NaN`; it is dropped with a warning, and the scorer treats unknown severities as errors as a last resort
+## [0.7.0] - 2026-07-10
 
 ### Added
 - Harness config files are security-scanned as a new `config` file type — Claude Code (`.mcp.json`, `.claude/settings.json` and `settings.local.json`), OpenCode (`opencode.json` / `opencode.jsonc`), and Copilot (`.vscode/mcp.json`, `.copilot/mcp-config.json`). They are discovered in workspace scans, lintable directly with `vibe-check check <file>`, and JSONC (comments, trailing commas) parses
@@ -25,7 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-skill invocation transparency: a new `skill/routing/invokes-skill` info finding lists the skills a `SKILL.md` invokes by slash-command name (e.g. `` `/grilling` ``), so the dependency is visible even when the skill is linted on its own — it fires regardless of `disable-model-invocation`. System paths (`/tmp`), Claude Code built-ins (`/compact`), file paths, and fenced code are excluded
 - Workspace diagnosis resolves those invocations against discovered skills and reports **unresolved skill invocations** — a skill invoking a `/name` that no skill in the workspace provides (dangling reference), with a light score penalty
 
+### Changed
+- Any `security/*` error now caps the score at 59 (Grade F), for the file itself and for findings surfaced from companion files or config scans. Previously the weighted average let a skill with e.g. a live credential still score an A while the verdict said it failed
+
 ### Fixed
+- Frontmatter that parses to a scalar or list (e.g. `---` around a plain sentence) is reported as `skill/meta/invalid-yaml` instead of crashing the linter — previously one such file aborted an entire `diagnose`/`batch` run with a `TypeError`
+- Workspace discovery no longer misclassifies companion markdown in subdirectories below a `SKILL.md` (`references/`, `examples/`, …) as standalone flat-layout skills; the check now looks at ancestor directories, not just siblings
+- Large `--json`/`--sarif` reports piped to a slow consumer (e.g. `| jq`) are no longer truncated: sync commands exit naturally via `process.exitCode`, and commands that fetch from GitHub flush stdout before exiting
+- An invalid severity value in a config file (anything other than `error`, `warn`, `info`) no longer poisons the score to `NaN`; it is dropped with a warning, and the scorer treats unknown severities as errors as a last resort
 - `security/commands/rm-rf-root` now flags bare `rm -rf /` (root with no trailing path), not just `rm -rf /<path>`
 
 ## [0.5.0] - 2026-07-07
@@ -95,7 +93,7 @@ Initial release: linter and security scanner for Claude skills, agents, and AI
 workspaces — skill/agent lint rules, workspace diagnosis, injection scanning,
 GitHub URL analysis, SARIF output, and configurable rule suppression.
 
-[Unreleased]: https://github.com/femmefatalerror/vibe-check/compare/v0.6.0...HEAD
+[0.7.0]: https://github.com/femmefatalerror/vibe-check/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/femmefatalerror/vibe-check/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/femmefatalerror/vibe-check/compare/v0.4.2...v0.4.3
